@@ -17,23 +17,11 @@ typedef struct {
 
 void fifo_put  (fifo_t * fifo, void * data);
 void fifo_atake(fifo_t * fifo, fifo_handle_t * node);
-int  fifo_abort(fifo_handle_t * node, void ** data);
 
-static inline void fifo_handle_init(fifo_handle_t * node) {
-  node->flag = 0;
-}
-
-static inline int fifo_test(fifo_handle_t * node, void ** ptr)
+static inline void * fifo_test(fifo_handle_t * node)
 {
   __asm__ ("pause": : :"memory");
-
-  int succeed = __atomic_load_n(&node->flag, __ATOMIC_ACQUIRE);
-
-  if (succeed) {
-    *ptr = node->data;
-  }
-
-  return succeed;
+  return node->data;
 }
 
 static inline void * fifo_take(fifo_t * fifo)
@@ -43,7 +31,7 @@ static inline void * fifo_take(fifo_t * fifo)
   fifo_atake(fifo, &node);
 
   void * data;
-  while (!fifo_test(&node, &data));
+  while (!(data = fifo_test(&node)));
 
   return data;
 }
