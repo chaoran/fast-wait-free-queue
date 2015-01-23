@@ -1,10 +1,10 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <pthread.h>
-#include "fifo.h"
+#include "hpcq.h"
 
 static pthread_barrier_t barrier;
-fifo_t fifo;
+hpcq_t hpcq;
 
 void * thread_main(void * val)
 {
@@ -17,10 +17,10 @@ void * thread_main(void * val)
   int j;
   for (i = 0; i < ntimes; ++i) {
     if (empty) {
-      val = fifo_take(&fifo);
+      val = hpcq_take(&hpcq);
       empty = 0;
     } else {
-      fifo_put(&fifo, val);
+      hpcq_put(&hpcq, val);
       empty = 1;
     }
   }

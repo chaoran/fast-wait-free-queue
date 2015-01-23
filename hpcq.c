@@ -1,7 +1,7 @@
 #include <stdlib.h>
-#include "fifo.h"
+#include "hpcq.h"
 
-typedef fifo_handle_t node_t;
+typedef hpcq_handle_t node_t;
 
 #define swap(ptr, val) __atomic_exchange_n(ptr, val, __ATOMIC_RELAXED)
 
@@ -38,18 +38,18 @@ static node_t * flip(node_t ** lock, node_t * node)
   return node;
 }
 
-static void deliver(fifo_t * fifo, node_t * cons, node_t * prod)
+static void deliver(hpcq_t * hpcq, node_t * cons, node_t * prod)
 {
   int flag;
 
   do {
     /** Release consumer lock and notify the consumer. */
-    node_t * next_cons = release(&fifo->C, cons);
+    node_t * next_cons = release(&hpcq->C, cons);
     cons->data = prod->data;
     cons = next_cons;
 
     /** Release producer lock and free the product node. */
-    node_t * next_prod = release(&fifo->P, prod);
+    node_t * next_prod = release(&hpcq->P, prod);
     free(prod);
     prod = next_prod;
 
@@ -58,14 +58,14 @@ static void deliver(fifo_t * fifo, node_t * cons, node_t * prod)
      * consumer at H, or get a product arrived after we release the
      * producer lock.
      */
-    if (!prod && cons) prod = flip(&fifo->H, cons);
+    if (!prod && cons) prod = flip(&hpcq->H, cons);
 
     /**
      * If we don't have a consumer but have a product left, leave the
      * product at H, or get a consumer arrived after we release the
      * consumer lock.
      */
-    if (!cons && prod) cons = flip(&fifo->H, prod);
+    if (!cons && prod) cons = flip(&hpcq->H, prod);
 
     /** Continue if we have a product and a consumer. */
   } while (prod && cons);
@@ -74,14 +74,14 @@ static void deliver(fifo_t * fifo, node_t * cons, node_t * prod)
 /**
  * Asynchronous dequeue operation.
  */
-void fifo_put(fifo_t * fifo, void * data)
+void hpcq_put(hpcq_t * hpcq, void * data)
 {
   node_t * prod = malloc(sizeof(node_t));
   prod->next = NULL;
   prod->data = data;
 
   /** Acquire producer lock. */
-  node_t * prev = acquire(&fifo->P, prod);
+  node_t * prev = acquire(&hpcq->P, prod);
 
   /** Someone is ahead me, enqueue data. */
   if (prev) {
@@ -90,21 +90,21 @@ void fifo_put(fifo_t * fifo, void * data)
   /** Producer lock acquired. */
   else {
     /** Get a consumer or enqueue my product. */
-    node_t * cons = flip(&fifo->H, prod);
-    if (cons) deliver(fifo, cons, prod);
+    node_t * cons = flip(&hpcq->H, prod);
+    if (cons) deliver(hpcq, cons, prod);
   }
 }
 
 /**
  * Asynchronous dequeue operation.
  */
-void fifo_atake(fifo_t * fifo, node_t * cons)
+void hpcq_atake(hpcq_t * hpcq, node_t * cons)
 {
   cons->next = NULL;
   cons->data = NULL;
 
   /** Acquire consumer lock. */
-  node_t * prev = acquire(&fifo->C, cons);
+  node_t * prev = acquire(&hpcq->C, cons);
 
   /** Someone is ahead of me. */
   if (prev) {
@@ -113,8 +113,8 @@ void fifo_atake(fifo_t * fifo, node_t * cons)
   /** I'm the first consumer. */
   else {
     /** Get a product or enqueue myself as consumer. */
-    node_t * prod = flip(&fifo->H, cons);
-    if (prod) deliver(fifo, cons, prod);
+    node_t * prod = flip(&hpcq->H, cons);
+    if (prod) deliver(hpcq, cons, prod);
   }
 }
 
