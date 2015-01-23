@@ -69,6 +69,7 @@ static void * thread_main(void * val)
   size_t elapsed, wait, average = 0;
   int id = (size_t) val - 1;
   int i, j;
+  hpcq_handle_t * node = malloc(sizeof(hpcq_handle_t [ntimes]));
 
   thread_pin(id);
 
@@ -81,7 +82,8 @@ static void * thread_main(void * val)
     }
 
     for (j = 0; j < ntimes; ++j) {
-      hpcq_put(&hpcq, val);
+      node[j].data = val;
+      hpcq_put(&hpcq, &node[j]);
       delay(rand_next(state) % max_wait);
 
       val = hpcq_take(&hpcq);
@@ -97,6 +99,8 @@ static void * thread_main(void * val)
       average += elapsed;
     }
   }
+
+  free(node);
 
   if (id == 0) {
     printf("time elapsed average: %ld ms\n", average / niters / 1000000);

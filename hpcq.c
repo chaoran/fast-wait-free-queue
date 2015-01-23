@@ -50,7 +50,6 @@ static void deliver(hpcq_t * hpcq, node_t * cons, node_t * prod)
 
     /** Release producer lock and free the product node. */
     node_t * next_prod = release(&hpcq->P, prod);
-    free(prod);
     prod = next_prod;
 
     /**
@@ -74,11 +73,9 @@ static void deliver(hpcq_t * hpcq, node_t * cons, node_t * prod)
 /**
  * Asynchronous dequeue operation.
  */
-void hpcq_put(hpcq_t * hpcq, void * data)
+void hpcq_put(hpcq_t * hpcq, node_t * prod)
 {
-  node_t * prod = malloc(sizeof(node_t));
   prod->next = NULL;
-  prod->data = data;
 
   /** Acquire producer lock. */
   node_t * prev = acquire(&hpcq->P, prod);
