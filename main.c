@@ -52,13 +52,8 @@ static void thread_pin(int id)
 
   cpu_set_t set;
   CPU_ZERO(&set);
-  int core_id = (id * 2) % max_nprocs;
-  int core_offset = (id * 2) / max_nprocs % 2;
-  int thread_id = core_id + core_offset;
 
-  printf("pin thread %d to cpu %d\n", id, thread_id);
-
-  CPU_SET(thread_id, &set);
+  CPU_SET(id % max_nprocs, &set);
   sched_setaffinity(0, sizeof(set), &set);
 }
 
@@ -66,7 +61,8 @@ static void * thread_main(void * val)
 {
   int empty = 0;
   rand_state_t state = rand_seed((size_t) val);
-  size_t elapsed, wait, average = 0;
+  size_t elapsed, wait;
+  double average = 0.0;
   int id = (size_t) val - 1;
   int i, j;
   hpcq_handle_t * node = malloc(sizeof(hpcq_handle_t [ntimes]));
@@ -101,9 +97,12 @@ static void * thread_main(void * val)
   }
 
   free(node);
+  average /= niters;
 
   if (id == 0) {
-    printf("time elapsed average: %ld ms\n", average / niters / 1000000);
+    printf("time elapsed average: %.3f ms\n", average / 1e6);
+    printf("Mops / second: %.3lf\n", ntimes * nprocs * 2 / (average / 1e3));
+    printf("latency: %.3lf us\n", (average / 1e3) / (ntimes * 2));
   }
   return val;
 }
