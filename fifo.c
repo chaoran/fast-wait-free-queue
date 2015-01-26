@@ -3,11 +3,13 @@
 #include <stdlib.h>
 #include "fifo.h"
 
+typedef char cache_t[64];
+
 typedef struct _fifo_node_t {
-  struct _fifo_node_t * next;
-  int64_t index;
-  size_t  count;
-  void * buffer[0];
+  struct _fifo_node_t * next __attribute__((aligned(64)));
+  int64_t index __attribute__((aligned(64)));
+  size_t  count __attribute__((aligned(64)));
+  cache_t buffer[0];
 } node_t;
 
 typedef fifo_handle_t handle_t;
@@ -15,8 +17,8 @@ typedef fifo_handle_t handle_t;
 #define fetch_and_add(p, v) __atomic_fetch_add(p, v, __ATOMIC_RELAXED)
 #define add_and_fetch(p, v) __atomic_add_fetch(p, v, __ATOMIC_RELAXED)
 
-#define load(ptr)    __atomic_load_n(ptr, __ATOMIC_RELAXED)
-#define store(ptr, v) __atomic_store_n(ptr, v, __ATOMIC_RELAXED)
+#define load(ptr) (* (void * volatile *) (ptr))
+#define store(ptr, v) (*(ptr) = v)
 
 #define compare_and_swap __sync_bool_compare_and_swap
 #define spin_while(cond) while (cond) __asm__ ("pause")
@@ -24,6 +26,7 @@ typedef fifo_handle_t handle_t;
 
 static inline node_t * new_node(int64_t index, size_t size)
 {
+  size *= 64 / sizeof(void *);
   size += sizeof(node_t) / sizeof(void *);
 
   node_t * node = calloc(size, sizeof(void *));
@@ -94,7 +97,7 @@ void fifo_put(fifo_t * fifo, handle_t * handle, void * data)
   }
 
   assert(node->index == ni);
-  store(&node->buffer[li], data);
+  store((void **) &node->buffer[li], data);
 }
 
 void * fifo_get(fifo_t * fifo, handle_t * handle)
@@ -135,7 +138,7 @@ void * fifo_get(fifo_t * fifo, handle_t * handle)
 
   /** Wait for data. */
   void * data;
-  spin_while((data = load(&node->buffer[li])) == NULL);
+  spin_while((data = load((void **) &node->buffer[li])) == NULL);
 
   return data;
 }

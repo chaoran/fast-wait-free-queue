@@ -124,7 +124,7 @@ int main(int argc, const char *argv[])
   ntimes = ntimes / nprocs;
 
   pthread_barrier_init(&barrier, NULL, nprocs);
-  fifo_init(&fifo, nprocs, nprocs);
+  fifo_init(&fifo, 1024, nprocs);
 
   pthread_t hds[nprocs];
   int i;

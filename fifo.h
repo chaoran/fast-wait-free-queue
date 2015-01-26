@@ -8,9 +8,9 @@ struct _fifo_node_t;
 typedef struct {
   size_t S;
   size_t W;
-  int64_t P;
-  int64_t C;
-  struct _fifo_node_t * T;
+  int64_t P __attribute__((aligned(64)));
+  int64_t C __attribute__((aligned(64)));
+  struct _fifo_node_t * T __attribute__((aligned(64)));
 } fifo_t;
 
 typedef struct {
