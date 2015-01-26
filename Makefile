@@ -1,8 +1,8 @@
 CFLAGS = -g -O3 -pthread
 LDFLAGS = -pthread
 LDLIBS = -lpthread
-EXEC = hpcq
-SRCS = hpcq.c main.c
+EXEC = fifo
+SRCS = fifo.c main.c
 
 all: $(EXEC)
 

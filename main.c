@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <pthread.h>
-#include "hpcq.h"
+#include "fifo.h"
 #include "rand.h"
 #include "time.h"
 
@@ -13,7 +13,7 @@ static size_t niters = 10;
 static size_t max_wait = 64;
 static size_t max_nprocs;
 static pthread_barrier_t barrier;
-static hpcq_t hpcq;
+static fifo_t fifo;
 static int nprocs;
 static int res[1024];
 
@@ -65,9 +65,11 @@ static void * thread_main(void * val)
   double average = 0.0;
   int id = (size_t) val - 1;
   int i, j;
-  hpcq_handle_t * node = malloc(sizeof(hpcq_handle_t [ntimes]));
 
   thread_pin(id);
+
+  fifo_handle_t handle;
+  fifo_register(&fifo, &handle);
 
   for (i = 1; i <= niters; ++i) {
     pthread_barrier_wait(&barrier);
@@ -78,11 +80,10 @@ static void * thread_main(void * val)
     }
 
     for (j = 0; j < ntimes; ++j) {
-      node[j].data = val;
-      hpcq_put(&hpcq, &node[j]);
+      fifo_put(&fifo, &handle, val);
       delay(rand_next(state) % max_wait);
 
-      val = hpcq_take(&hpcq);
+      val = fifo_get(&fifo, &handle);
       delay(rand_next(state) % max_wait);
     }
 
@@ -96,7 +97,6 @@ static void * thread_main(void * val)
     }
   }
 
-  free(node);
   average /= niters;
 
   if (id == 0) {
@@ -124,6 +124,8 @@ int main(int argc, const char *argv[])
   ntimes = ntimes / nprocs;
 
   pthread_barrier_init(&barrier, NULL, nprocs);
+  fifo_init(&fifo, nprocs, nprocs);
+
   pthread_t hds[nprocs];
   int i;
 
