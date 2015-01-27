@@ -110,15 +110,16 @@ int verify(int nprocs)
   sort(results, nprocs);
 
   int i;
+  int ret = 0;
 
   for (i = 0; i < nprocs; ++i) {
     if ((size_t) results[i] != i + 1) {
       fprintf(stderr, "expected %ld but received %ld\n", i + 1, results[i]);
-      return 1;
+      ret = 1;
     }
   }
 
-  return 0;
+  return ret;
 }
 
 int main(int argc, const char *argv[])
