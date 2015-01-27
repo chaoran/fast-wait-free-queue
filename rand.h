@@ -1,6 +1,7 @@
 #ifndef RAND_H
 #define RAND_H
 
+#include <stddef.h>
 typedef size_t rand_state_t;
 
 static inline rand_state_t rand_seed(size_t seed)

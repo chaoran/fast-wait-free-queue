@@ -1,12 +1,9 @@
-CFLAGS = -g -O3 -pthread
+CFLAGS = -g -O3 -pthread -D_GNU_SOURCE
 LDFLAGS = -pthread
 LDLIBS = -lpthread
-EXEC = hpcq
-SRCS = hpcq.c main.c
+EXEC = faa lcrq hpcq
 
 all: $(EXEC)
-
-$(EXEC): $(SRCS)
 
 clean:
 	rm -rf $(EXEC) *.o

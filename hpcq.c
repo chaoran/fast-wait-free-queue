@@ -115,3 +115,48 @@ void hpcq_atake(hpcq_t * hpcq, node_t * cons)
   }
 }
 
+hpcq_t fifo;
+
+static inline void delay(size_t cycles)
+{
+  int i;
+
+  for (i = 0; i < cycles; ++i) {
+    __asm__ ("pause");
+  }
+}
+
+#include "rand.h"
+#include "bench.h"
+
+size_t n = 10000000;
+
+void init()
+{
+  n /= nprocs;
+}
+
+void prep(int id) { };
+
+void test(int id)
+{
+  static size_t max_wait = 64;
+  size_t state = rand_seed(id);
+
+  hpcq_handle_t * nodes = malloc(sizeof(hpcq_t [n]));
+  void * val = (void *) (long) id + 1;
+
+  int i;
+  for (i = 0; i < n; ++i) {
+    nodes[i].data = val;
+    hpcq_put(&fifo, &nodes[i]);
+    delay(rand_next(state) % max_wait);
+
+    val = hpcq_take(&fifo);
+    delay(rand_next(state) % max_wait);
+  }
+
+  free(nodes);
+}
+
+int verify() {}
