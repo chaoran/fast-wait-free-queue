@@ -52,13 +52,13 @@ void fifo_init(fifo_t * fifo, size_t size, size_t width)
   fifo->T = new_node(-1, size);
 }
 
-void fifo_register(const fifo_t * fifo, handle_t handle)
+void fifo_register(const fifo_t * fifo, handle_t * handle)
 {
-  handle[0] = fifo->T;
-  handle[1] = fifo->T;
+  handle->P = fifo->T;
+  handle->C = fifo->T;
 }
 
-static node_t * update(size_t index, handle_t handle, int i, fifo_t * fifo)
+static node_t * update(int64_t index, node_t ** handle, int i, fifo_t * fifo)
 {
   node_t * node = handle[i];
 
@@ -90,23 +90,23 @@ static node_t * update(size_t index, handle_t handle, int i, fifo_t * fifo)
   return node;
 }
 
-void fifo_put(fifo_t * fifo, handle_t handle, void * data)
+void fifo_put(fifo_t * fifo, handle_t * handle, void * data)
 {
   int64_t i  = fetch_and_add(&fifo->P, 1);
   int64_t ni = i / fifo->S;
   int64_t li = i % fifo->S;
 
-  node_t * node = update(ni, handle, 0, fifo);
+  node_t * node = update(ni, (node_t **) handle, 0, fifo);
   store((void **) &node->buffer[li], data);
 }
 
-void * fifo_get(fifo_t * fifo, handle_t handle)
+void * fifo_get(fifo_t * fifo, handle_t * handle)
 {
   int64_t i  = fetch_and_add(&fifo->C, 1);
   int64_t ni = i / fifo->S;
   int64_t li = i % fifo->S;
 
-  node_t * node = update(ni, handle, 1, fifo);
+  node_t * node = update(ni, (node_t **) handle, 1, fifo);
 
   /** Wait for data. */
   void * data;
@@ -135,21 +135,21 @@ void prep(int id, void * args)
 {
   local_t * locals = (local_t *) args;
 
-  fifo_register(&fifo, locals->handle);
+  fifo_register(&fifo, &locals->handle);
   locals->val = (void *) (long) id + 1;
 }
 
 void enqueue(int id, int i, void * args)
 {
   local_t * locals = (local_t *) args;
-  fifo_put(&fifo, locals->handle, locals->val);
+  fifo_put(&fifo, &locals->handle, locals->val);
 }
 
 void dequeue(int id, int i, void * args)
 {
   local_t * locals = (local_t *) args;
-  locals->val = fifo_get(&fifo, locals->handle);
+  locals->val = fifo_get(&fifo, &locals->handle);
 }
 
-int verify() {}
+int verify() { }
 

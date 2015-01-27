@@ -13,11 +13,14 @@ typedef struct {
   struct _fifo_node_t * T __attribute__((aligned(64)));
 } fifo_t;
 
-typedef struct _fifo_node_t * fifo_handle_t[2];
+typedef struct __attribute__((__packed__)){
+  struct _fifo_node_t * P;
+  struct _fifo_node_t * C;
+} fifo_handle_t;
 
 void fifo_init(fifo_t * fifo, size_t size, size_t width);
-void fifo_register(const fifo_t * fifo, fifo_handle_t handle);
-void * fifo_get(fifo_t * fifo, fifo_handle_t handle);
-void fifo_put(fifo_t * fifo, fifo_handle_t handle, void * data);
+void fifo_register(const fifo_t * fifo, fifo_handle_t * handle);
+void * fifo_get(fifo_t * fifo, fifo_handle_t * handle);
+void fifo_put(fifo_t * fifo, fifo_handle_t * handle, void * data);
 
 #endif /* end of include guard: FIFO_H */
