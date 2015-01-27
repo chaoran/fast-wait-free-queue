@@ -7,8 +7,6 @@
 #include <unistd.h>
 #include <pthread.h>
 
-#define MAX_THREADS 512
-
 static size_t n = 10000000;
 static int iters = 10;
 static size_t times[MAX_THREADS];
