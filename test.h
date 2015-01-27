@@ -8,10 +8,7 @@ size_t n = 10000000;
 static inline void delay(size_t cycles)
 {
   int i;
-
-  for (i = 0; i < cycles; ++i) {
-    __asm__ ("pause");
-  }
+  for (i = 0; i < cycles; ++i);
 }
 
 static void test(int id)
