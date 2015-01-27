@@ -342,12 +342,12 @@ static int32_t get(int pid) {
   }
 }
 
-void enqueue(int id)
+void enqueue(int id, int i, void * args)
 {
   put(id, id);
 }
 
-void dequeue(int id)
+void dequeue(int id, int i, void * args)
 {
   get(id);
 }
@@ -358,5 +358,5 @@ void init()
   SHARED_OBJECT_INIT();
 }
 
-void prep(int id) {}
+void prep(int id, void * args) {}
 int verify() {}

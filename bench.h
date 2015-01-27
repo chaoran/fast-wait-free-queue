@@ -37,23 +37,24 @@ static void sort(void * ptr, size_t len)
 
 static void * bench(void * id_)
 {
-  void prep(int id);
-  void test(int id);
+  void prep(int id, void *);
+  void test(int id, void *);
 
   size_t id = (size_t) id_;
   thread_pin(id);
 
+  char locals[1024];
+  prep(id, locals);
+
   int i;
   for (i = 0; i < iters; ++i) {
-    prep(id);
-
     pthread_barrier_wait(&barrier);
 
     if (id == 0) {
       times[i] = time_elapsed(0);
     }
 
-    test(id);
+    test(id, locals);
     pthread_barrier_wait(&barrier);
 
     if (id == 0) {

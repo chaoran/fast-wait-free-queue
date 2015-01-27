@@ -11,10 +11,10 @@ static inline void delay(size_t cycles)
   for (i = 0; i < cycles; ++i);
 }
 
-static void test(int id)
+static void test(int id, void * args)
 {
-  void enqueue(int id);
-  void dequeue(int id);
+  void enqueue(int id, int i, void *);
+  void dequeue(int id, int i, void *);
 
   static size_t max_wait = 64;
   size_t state = rand_seed(id);
@@ -22,10 +22,10 @@ static void test(int id)
   int i;
 
   for (i = 0; i < n; ++i) {
-    enqueue(id);
+    enqueue(id, i, args);
     delay(rand_next(state) % max_wait);
 
-    dequeue(id);
+    dequeue(id, i, args);
     delay(rand_next(state) % max_wait);
   }
 }

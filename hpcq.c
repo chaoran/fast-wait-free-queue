@@ -117,44 +117,37 @@ void hpcq_atake(hpcq_t * hpcq, node_t * cons)
 
 hpcq_t fifo;
 
-static inline void delay(size_t cycles)
-{
-  int i;
-
-  for (i = 0; i < cycles; ++i);
-}
-
-#include "rand.h"
+#include "test.h"
 #include "bench.h"
-
-size_t n = 10000000;
 
 void init()
 {
   n /= nprocs;
 }
 
-void prep(int id) { };
+typedef struct _local_t {
+  void * val;
+  hpcq_handle_t * nodes;
+} local_t;
 
-void test(int id)
+void prep(int id, void * args)
 {
-  static size_t max_wait = 64;
-  size_t state = rand_seed(id);
+  local_t * locals = (local_t *) args;
+  locals->val = (void *) (size_t) id + 1;
+  locals->nodes = malloc(sizeof(hpcq_t [n]));
+}
 
-  hpcq_handle_t * nodes = malloc(sizeof(hpcq_t [n]));
-  void * val = (void *) (long) id + 1;
+void enqueue(int id, int i, void * args)
+{
+  local_t * locals = (local_t *) args;
+  locals->nodes[i].data = locals->val;
+  hpcq_put(&fifo, &locals->nodes[i]);
+}
 
-  int i;
-  for (i = 0; i < n; ++i) {
-    nodes[i].data = val;
-    hpcq_put(&fifo, &nodes[i]);
-    delay(rand_next(state) % max_wait);
-
-    val = hpcq_take(&fifo);
-    delay(rand_next(state) % max_wait);
-  }
-
-  free(nodes);
+void dequeue(int id, int i, void * args)
+{
+  local_t * locals = (local_t *) args;
+  locals->val = hpcq_take(&fifo);
 }
 
 int verify() {}

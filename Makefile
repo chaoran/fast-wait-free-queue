@@ -1,7 +1,7 @@
 CFLAGS = -g -O3 -pthread -D_GNU_SOURCE
 LDFLAGS = -pthread
 LDLIBS = -lpthread
-EXEC = faa lcrq hpcq
+EXEC = faa lcrq hpcq fifo
 
 all: $(EXEC)
 

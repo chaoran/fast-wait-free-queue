@@ -11,14 +11,14 @@ void init()
   n /= nprocs;
 }
 
-void prep(int id) {}
+void prep(int id, void * args) {}
 
-void enqueue(int id)
+void enqueue(int id, int i, void * args)
 {
   fetch_and_add(&P, 1);
 }
 
-void dequeue(int id)
+void dequeue(int id, int i, void * args)
 {
   fetch_and_add(&C, 1);
 }
