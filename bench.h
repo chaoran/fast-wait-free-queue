@@ -6,8 +6,6 @@
 #include <string.h>
 #include <unistd.h>
 #include <pthread.h>
-#include "time.h"
-#include "rand.h"
 
 #define MAX_THREADS 512
 
@@ -16,6 +14,8 @@ static int iters = 10;
 static size_t times[MAX_THREADS];
 static void * results[MAX_THREADS];
 static pthread_barrier_t barrier;
+
+typedef size_t rand_state_t;
 
 static void thread_pin(int id)
 {
@@ -41,6 +41,25 @@ static inline void delay(size_t cycles)
   int i;
   for (i = 0; i < cycles; ++i);
 }
+
+size_t static inline time_elapsed(size_t val)
+{
+  struct timespec t;
+  clock_gettime(CLOCK_MONOTONIC, &t);
+  return t.tv_sec * 1000000000 + t.tv_nsec - val;
+}
+
+static inline rand_state_t rand_seed(size_t seed)
+{
+  return seed;
+}
+
+static inline size_t rand_next(rand_state_t state)
+{
+  state = state * 1103515245 + 12345;
+  return state / 65536 % 32768;
+}
+
 
 static void * bench(void * id_)
 {
