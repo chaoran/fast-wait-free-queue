@@ -1,4 +1,3 @@
-#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include "fifo.h"
@@ -46,8 +45,6 @@ static inline void try_free(node_t * node, node_t * alt, size_t size)
 
 void fifo_init(fifo_t * fifo, size_t size, size_t width)
 {
-  assert(size >= width);
-
   fifo->S = size;
   fifo->W = width;
   fifo->P = 0;
@@ -55,86 +52,61 @@ void fifo_init(fifo_t * fifo, size_t size, size_t width)
   fifo->T = new_node(-1, size);
 }
 
-void fifo_register(const fifo_t * fifo, handle_t * handle)
+void fifo_register(const fifo_t * fifo, handle_t handle)
 {
-  handle->P = fifo->T;
-  handle->C = fifo->T;
+  handle[0] = fifo->T;
+  handle[1] = fifo->T;
 }
 
-void fifo_put(fifo_t * fifo, handle_t * handle, void * data)
+static node_t * update(size_t index, handle_t handle, int i, fifo_t * fifo)
+{
+  node_t * node = handle[i];
+
+  if (node->index < index) {
+    node_t * prev = node;
+
+    while (prev->index < index - 1) {
+      spin_while((node = load(&prev->next)) == NULL);
+      try_free(prev, handle[1 - i], fifo->W);
+      prev = node;
+    }
+
+    node = prev->next;
+
+    if (!node) {
+      if (compare_and_swap(&fifo->T, prev, INVALID)) {
+        node = new_node(index, fifo->S);
+        fifo->T = node;
+        store(&prev->next, node);
+      } else {
+        spin_while((node = load(&prev->next)) == NULL);
+      }
+    }
+
+    try_free(prev, handle[1 - i], fifo->W);
+    handle[i] = node;
+  }
+
+  return node;
+}
+
+void fifo_put(fifo_t * fifo, handle_t handle, void * data)
 {
   int64_t i  = fetch_and_add(&fifo->P, 1);
   int64_t ni = i / fifo->S;
   int64_t li = i % fifo->S;
 
-  node_t * node = handle->P;
-  assert(node->index <= ni);
-
-  if (node->index < ni) {
-    node_t * prev = node;
-
-    while (prev->index < ni - 1) {
-      spin_while((node = load(&prev->next)) == NULL);
-      try_free(prev, handle->C, fifo->W);
-      prev = node;
-    }
-
-    assert(prev->index == ni - 1);
-    node = prev->next;
-
-    if (!node) {
-      if (compare_and_swap(&fifo->T, prev, INVALID)) {
-        node = new_node(ni, fifo->S);
-        fifo->T = node;
-        store(&prev->next, node);
-      } else {
-        spin_while((node = load(&prev->next)) == NULL);
-      }
-    }
-
-    try_free(prev, handle->C, fifo->W);
-    handle->P = node;
-  }
-
-  assert(node->index == ni);
+  node_t * node = update(ni, handle, 0, fifo);
   store((void **) &node->buffer[li], data);
 }
 
-void * fifo_get(fifo_t * fifo, handle_t * handle)
+void * fifo_get(fifo_t * fifo, handle_t handle)
 {
   int64_t i  = fetch_and_add(&fifo->C, 1);
   int64_t ni = i / fifo->S;
   int64_t li = i % fifo->S;
 
-  node_t * node = handle->C;
-
-  if (node->index < ni) {
-    node_t * prev = node;
-
-    while (prev->index < ni - 1) {
-      spin_while((node = load(&prev->next)) == NULL);
-      try_free(prev, handle->P, fifo->W);
-      prev = node;
-    }
-
-    assert(prev->index == ni - 1);
-    node = prev->next;
-
-    if (!node) {
-      if (compare_and_swap(&fifo->T, prev, INVALID)) {
-        node = new_node(ni, fifo->S);
-        fifo->T = node;
-        store(&prev->next, node);
-      } else {
-        spin_while((node = load(&prev->next)) == NULL);
-      }
-    }
-
-    try_free(prev, handle->P, fifo->W);
-    handle->C = node;
-  }
-
-  assert(node->index == ni);
+  node_t * node = update(ni, handle, 1, fifo);
 
   /** Wait for data. */
   void * data;
@@ -163,20 +135,20 @@ void prep(int id, void * args)
 {
   local_t * locals = (local_t *) args;
 
-  fifo_register(&fifo, &locals->handle);
+  fifo_register(&fifo, locals->handle);
   locals->val = (void *) (long) id + 1;
 }
 
 void enqueue(int id, int i, void * args)
 {
   local_t * locals = (local_t *) args;
-  fifo_put(&fifo, &locals->handle, locals->val);
+  fifo_put(&fifo, locals->handle, locals->val);
 }
 
 void dequeue(int id, int i, void * args)
 {
   local_t * locals = (local_t *) args;
-  locals->val = fifo_get(&fifo, &locals->handle);
+  locals->val = fifo_get(&fifo, locals->handle);
 }
 
 int verify() {}
