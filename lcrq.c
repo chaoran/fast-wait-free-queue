@@ -1,6 +1,5 @@
-#include "test.h"
-#include "bench.h"
 #include <stdint.h>
+#include <stdlib.h>
 
 // Definition: RING_POW
 // --------------------
@@ -204,7 +203,7 @@ inline int close_crq(RingQueue *rq, const uint64_t t, const int tries) {
     return BIT_TEST_AND_SET(&rq->tail, 63);
 }
 
-static void put(int32_t arg, int pid) {
+static void lcrq_put(uint64_t arg) {
   int try_close = 0;
 
   while (1) {
@@ -233,7 +232,7 @@ alloc:
       }
 
       // Solo enqueue
-      nrq->tail = 1, nrq->array[0].val = arg, nrq->array[0].idx = 0;
+      nrq->tail = 1, nrq->array[0].val = (uint64_t) arg, nrq->array[0].idx = 0;
 
       if (CASPTR(&rq->next, NULL, nrq)) {
         CASPTR(&tail, rq, nrq);
@@ -268,8 +267,7 @@ alloc:
   }
 }
 
-static int32_t get(int pid) {
-
+static uint64_t lcrq_get() {
   while (1) {
     RingQueue *rq = head;
     RingQueue *next;
@@ -342,21 +340,29 @@ static int32_t get(int pid) {
   }
 }
 
-void enqueue(int id, int i, void * args)
+#ifdef BENCHMARK
+
+typedef int thread_local_t;
+#include "bench.h"
+
+void enqueue(void * val, void * args)
 {
-  put(id, id);
+  lcrq_put((uint64_t) val);
 }
 
-void dequeue(int id, int i, void * args)
+void * dequeue(void * args)
 {
-  get(id);
+  uint64_t val;
+  while ((val = lcrq_get()) == (uint64_t) -1);
+
+  return (void *) val;
 }
 
-void init()
+void init(int nprocs)
 {
-  n /= nprocs;
   SHARED_OBJECT_INIT();
 }
 
-void prep(int id, void * args) {}
-int verify() {}
+void thread_init(int id, void * args) {}
+
+#endif

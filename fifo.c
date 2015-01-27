@@ -115,41 +115,29 @@ void * fifo_get(fifo_t * fifo, handle_t * handle)
   return data;
 }
 
-#include "test.h"
+typedef fifo_handle_t thread_local_t;
+
 #include "bench.h"
 
 static fifo_t fifo;
 
-void init()
+void init(int nprocs)
 {
-  n /= nprocs;
   fifo_init(&fifo, 1024, nprocs);
 }
 
-typedef struct _local_t {
-  fifo_handle_t handle;
-  void * val;
-} local_t;
-
-void prep(int id, void * args)
+void thread_init(int id, void * handle)
 {
-  local_t * locals = (local_t *) args;
-
-  fifo_register(&fifo, &locals->handle);
-  locals->val = (void *) (long) id + 1;
+  fifo_register(&fifo, handle);
 }
 
-void enqueue(int id, int i, void * args)
+void enqueue(void * val, void * handle)
 {
-  local_t * locals = (local_t *) args;
-  fifo_put(&fifo, &locals->handle, locals->val);
+  fifo_put(&fifo, handle, val);
 }
 
-void dequeue(int id, int i, void * args)
+void * dequeue(void * handle)
 {
-  local_t * locals = (local_t *) args;
-  locals->val = fifo_get(&fifo, &locals->handle);
+  return fifo_get(&fifo, handle);
 }
-
-int verify() { }
 

@@ -7,21 +7,22 @@
 #include <unistd.h>
 #include <pthread.h>
 #include "time.h"
+#include "rand.h"
 
-size_t n;
-int nprocs;
+#define MAX_THREADS 512
+
+static size_t n = 10000000;
 static int iters = 10;
-static size_t times[512];
+static size_t times[MAX_THREADS];
+static void * results[MAX_THREADS];
 static pthread_barrier_t barrier;
 
 static void thread_pin(int id)
 {
-  pthread_setconcurrency(nprocs);
-
   cpu_set_t set;
   CPU_ZERO(&set);
 
-  CPU_SET(id % nprocs, &set);
+  CPU_SET(id, &set);
   sched_setaffinity(0, sizeof(set), &set);
 }
 
@@ -35,16 +36,28 @@ static void sort(void * ptr, size_t len)
   qsort(ptr, len, sizeof(size_t), compare);
 }
 
+static inline void delay(size_t cycles)
+{
+  int i;
+  for (i = 0; i < cycles; ++i);
+}
+
 static void * bench(void * id_)
 {
-  void prep(int id, void *);
-  void test(int id, void *);
+  void thread_init(int id, void *);
+  void enqueue(void *, void *);
+  void * dequeue(void *);
 
   size_t id = (size_t) id_;
   thread_pin(id);
 
-  char locals[1024];
-  prep(id, locals);
+  void * val = (void *) id + 1;
+
+  thread_local_t locals;
+  thread_init(id, &locals);
+
+  static size_t max_wait = 64;
+  size_t state = rand_seed(id);
 
   int i;
   for (i = 0; i < iters; ++i) {
@@ -54,7 +67,15 @@ static void * bench(void * id_)
       times[i] = time_elapsed(0);
     }
 
-    test(id, locals);
+    int j;
+    for (j = 0; j < n; ++j) {
+      enqueue(val, &locals);
+      delay(rand_next(state) % max_wait);
+
+      val = dequeue(&locals);
+      delay(rand_next(state) % max_wait);
+    }
+
     pthread_barrier_wait(&barrier);
 
     if (id == 0) {
@@ -63,14 +84,31 @@ static void * bench(void * id_)
       printf("  #%d execution time: %d ms\n", i, times[i]);
     }
   }
+
+  results[id] = val;
+}
+
+int verify(int nprocs)
+{
+  sort(results, nprocs);
+
+  int i;
+
+  for (i = 0; i < nprocs; ++i) {
+    if ((size_t) results[i] != i + 1) {
+      fprintf(stderr, "expected %ld but received %ld\n", i + 1, results[i]);
+      return 1;
+    }
+  }
+
+  return 0;
 }
 
 int main(int argc, const char *argv[])
 {
-  void init();
-  int verify();
+  void init(int);
 
-  nprocs = 0;
+  int nprocs = 0;
 
   if (argc > 1) {
     nprocs = atoi(argv[1]);
@@ -80,8 +118,10 @@ int main(int argc, const char *argv[])
     nprocs = sysconf(_SC_NPROCESSORS_ONLN);
   }
 
-  init();
+  init(nprocs);
   pthread_barrier_init(&barrier, NULL, nprocs);
+  pthread_setconcurrency(nprocs);
+  n /= nprocs;
 
   printf("===========================================\n");
   printf("  Benchmark: %s\n", strrchr(argv[0], '/') + 1);
@@ -115,7 +155,7 @@ int main(int argc, const char *argv[])
   printf("    90th %%: %d ms\n", p90);
   printf("===========================================\n");
 
-  return verify();
+  return verify(nprocs);
 }
 
 #endif /* end of include guard: BENCH_H */
