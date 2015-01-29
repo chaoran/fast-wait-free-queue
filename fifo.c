@@ -22,13 +22,20 @@ typedef fifo_handle_t handle_t;
 #define load(ptr) (* (void * volatile *) (ptr))
 #define spin_while(cond) while (cond) __asm__ ("pause")
 
-static inline node_t * new_node(int64_t index, size_t size)
+static inline node_t * new_node(int64_t index, size_t size, node_t ** in)
 {
-  size = sizeof(node_t) + sizeof(cache_t [size]);
+  node_t * node = in ? *in : NULL;
 
-  node_t * node;
-  posix_memalign((void **) &node, 4096, size);
-  memset(node, 0, size);
+  if (node) {
+    *in = NULL;
+    node->count = 0;
+    node->next  = NULL;
+  } else {
+    size = sizeof(node_t) + sizeof(cache_t [size]);
+
+    posix_memalign((void **) &node, 4096, size);
+    memset(node, 0, size);
+  }
 
   node->index = index;
   return node;
@@ -42,7 +49,6 @@ static inline void try_free(node_t * node, node_t * alt, fifo_t * fifo,
       if (*out) {
         free(node);
       } else {
-        memset(node, 0, sizeof(node_t) + sizeof(cache_t [fifo->S]));
         *out = node;
       }
     }
@@ -55,7 +61,7 @@ void fifo_init(fifo_t * fifo, size_t size, size_t width)
   fifo->W = width;
   fifo->P = 0;
   fifo->C = 0;
-  fifo->T = new_node(-1, size);
+  fifo->T = new_node(-1, size, NULL);
 }
 
 void fifo_register(const fifo_t * fifo, handle_t * handle)
@@ -81,16 +87,12 @@ static node_t * update(int64_t index, node_t ** handle, int i, fifo_t * fifo)
     node = prev->next;
 
     if (!node) {
-      if ((node = handle[2])) {
-        node->index = index;
-      } else {
-        node = handle[2] = new_node(index, fifo->S);
-      }
+      node = new_node(index, fifo->S, &handle[2]);
 
       if (compare_and_swap(&fifo->T, prev, node)) {
         prev->next = node;
-        handle[2] = NULL;
       } else {
+        handle[2] = node;
         spin_while((node = load(&prev->next)) == NULL);
       }
     }
@@ -123,6 +125,7 @@ void * fifo_get(fifo_t * fifo, handle_t * handle)
   /** Wait for data. */
   void * data;
   spin_while((data = load(&node->buffer[li].data)) == NULL);
+  node->buffer[li].data = NULL;
 
   return data;
 }
