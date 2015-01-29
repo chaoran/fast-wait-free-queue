@@ -2,16 +2,11 @@
 #include <string.h>
 #include "fifo.h"
 
-typedef union {
-  void * data;
-  char cache[64];
-} cache_t;
-
 typedef struct _fifo_node_t {
   int64_t index;
   size_t  count;
   struct _fifo_node_t * next __attribute__((aligned(64)));
-  cache_t buffer[0];
+  void * buffer[0] __attribute__((aligned(64)));
 } node_t;
 
 typedef fifo_handle_t handle_t;
@@ -31,7 +26,7 @@ static inline node_t * new_node(int64_t index, size_t size, node_t ** in)
     node->count = 0;
     node->next  = NULL;
   } else {
-    size = sizeof(node_t) + sizeof(cache_t [size]);
+    size = sizeof(node_t) + sizeof(void * [size]);
 
     posix_memalign((void **) &node, 4096, size);
     memset(node, 0, size);
@@ -111,7 +106,7 @@ void fifo_put(fifo_t * fifo, handle_t * handle, void * data)
   int64_t li = i % fifo->S;
 
   node_t * node = update(ni, (node_t **) handle, 0, fifo);
-  node->buffer[li].data = data;
+  node->buffer[li] = data;
 }
 
 void * fifo_get(fifo_t * fifo, handle_t * handle)
@@ -124,8 +119,8 @@ void * fifo_get(fifo_t * fifo, handle_t * handle)
 
   /** Wait for data. */
   void * data;
-  spin_while((data = load(&node->buffer[li].data)) == NULL);
-  node->buffer[li].data = NULL;
+  spin_while((data = load(&node->buffer[li])) == NULL);
+  node->buffer[li] = NULL;
 
   return data;
 }
