@@ -1,13 +1,12 @@
-#include <stdio.h>
 #include <stdlib.h>
 #include "fifo.h"
 
 typedef char cache_t[64];
 
 typedef struct _fifo_node_t {
+  int64_t index;
+  size_t  count;
   struct _fifo_node_t * next __attribute__((aligned(64)));
-  int64_t index __attribute__((aligned(64)));
-  size_t  count __attribute__((aligned(64)));
   cache_t buffer[0];
 } node_t;
 
@@ -15,32 +14,27 @@ typedef fifo_handle_t handle_t;
 
 #define fetch_and_add(p, v) __atomic_fetch_add(p, v, __ATOMIC_RELAXED)
 #define add_and_fetch(p, v) __atomic_add_fetch(p, v, __ATOMIC_RELAXED)
+#define compare_and_swap __sync_bool_compare_and_swap
 
 #define load(ptr) (* (void * volatile *) (ptr))
 #define store(ptr, v) (*(ptr) = v)
 
-#define compare_and_swap __sync_bool_compare_and_swap
 #define spin_while(cond) while (cond) __asm__ ("pause")
-#define INVALID ((void *) -1)
 
 static inline node_t * new_node(int64_t index, size_t size)
 {
-  size *= 64 / sizeof(void *);
-  size += sizeof(node_t) / sizeof(void *);
-
-  node_t * node = calloc(size, sizeof(void *));
-  node->next = NULL;
+  node_t * node = calloc(sizeof(node_t) + sizeof(cache_t [size]), 1);
   node->index = index;
-  node->count = 0;
-
   return node;
 }
 
 static inline void try_free(node_t * node, node_t * alt, size_t size)
 {
-  if (alt->index > node->index)
-    if (add_and_fetch(&node->count, 1) == size)
+  if (alt->index > node->index) {
+    if (add_and_fetch(&node->count, 1) == size) {
       free(node);
+    }
+  }
 }
 
 void fifo_init(fifo_t * fifo, size_t size, size_t width)
@@ -66,7 +60,7 @@ static node_t * update(int64_t index, node_t ** handle, int i, fifo_t * fifo)
     node_t * prev = node;
 
     while (prev->index < index - 1) {
-      spin_while((node = load(&prev->next)) == NULL);
+      node = prev->next;
       try_free(prev, handle[1 - i], fifo->W);
       prev = node;
     }
@@ -74,10 +68,10 @@ static node_t * update(int64_t index, node_t ** handle, int i, fifo_t * fifo)
     node = prev->next;
 
     if (!node) {
-      if (compare_and_swap(&fifo->T, prev, INVALID)) {
+      if (compare_and_swap(&fifo->T, prev, NULL)) {
         node = new_node(index, fifo->S);
         fifo->T = node;
-        store(&prev->next, node);
+        prev->next = node;
       } else {
         spin_while((node = load(&prev->next)) == NULL);
       }

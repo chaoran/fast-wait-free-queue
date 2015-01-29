@@ -13,7 +13,7 @@ typedef struct {
   struct _fifo_node_t * T __attribute__((aligned(64)));
 } fifo_t;
 
-typedef struct __attribute__((__packed__)){
+typedef struct __attribute__((__packed__, aligned(64))){
   struct _fifo_node_t * P;
   struct _fifo_node_t * C;
 } fifo_handle_t;
