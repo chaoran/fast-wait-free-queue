@@ -9,7 +9,6 @@
 #include <sys/timeb.h>
 #include <malloc.h>
 
-#include "stats.h"
 #include "types.h"
 #include "system.h"
 
