@@ -62,6 +62,7 @@ static inline size_t rand_next(rand_state_t state)
 static void * bench(void * id_)
 {
   void thread_init(int id, void *);
+  void thread_exit(int id, void *);
   void enqueue(void *, void *);
   void * dequeue(void *);
 
@@ -103,6 +104,8 @@ static void * bench(void * id_)
   }
 
   results[id] = val;
+  thread_exit(id, &locals);
+  return NULL;
 }
 
 int verify(int nprocs)

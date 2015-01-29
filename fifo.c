@@ -36,11 +36,11 @@ static inline node_t * new_node(int64_t index, size_t size, node_t ** in)
   return node;
 }
 
-static inline void try_free(node_t * node, node_t * alt, fifo_t * fifo,
+static inline void try_free(node_t * node, int64_t index, size_t nprocs,
     node_t ** out)
 {
-  if (alt->index > node->index) {
-    if (add_and_fetch(&node->count, 1) == fifo->W) {
+  if (index > node->index) {
+    if (add_and_fetch(&node->count, 1) == nprocs) {
       if (*out) {
         free(node);
       } else {
@@ -66,6 +66,20 @@ void fifo_register(const fifo_t * fifo, handle_t * handle)
   handle->F = NULL;
 }
 
+void fifo_unregister(const fifo_t * fifo, handle_t * handle)
+{
+  node_t * curr, * next;
+
+  curr = handle->P->index > handle->C->index ? handle->C : handle->P;
+
+  do {
+    next = curr->next;
+    try_free(curr, curr->index + 1, fifo->W, &handle->F);
+  } while ((curr = next));
+
+  free(handle->F);
+}
+
 static node_t * update(int64_t index, node_t ** handle, int i, fifo_t * fifo)
 {
   node_t * node = handle[i];
@@ -75,7 +89,7 @@ static node_t * update(int64_t index, node_t ** handle, int i, fifo_t * fifo)
 
     while (prev->index < index - 1) {
       node = prev->next;
-      try_free(prev, handle[1 - i], fifo, &handle[2]);
+      try_free(prev, handle[1 - i]->index, fifo->W, &handle[2]);
       prev = node;
     }
 
@@ -92,7 +106,7 @@ static node_t * update(int64_t index, node_t ** handle, int i, fifo_t * fifo)
       }
     }
 
-    try_free(prev, handle[1 - i], fifo, &handle[2]);
+    try_free(prev, handle[1 - i]->index, fifo->W, &handle[2]);
     handle[i] = node;
   }
 
@@ -139,6 +153,11 @@ void init(int nprocs)
 void thread_init(int id, void * handle)
 {
   fifo_register(&fifo, handle);
+}
+
+void thread_exit(int id, void * handle)
+{
+  fifo_unregister(&fifo, handle);
 }
 
 void enqueue(void * val, void * handle)
