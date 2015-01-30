@@ -18,13 +18,13 @@ typedef struct _msqueue_t {
 } msqueue_t;
 
 static inline
-int compare_and_swap(volatile pointer_t * ptr, pointer_t cmp, pointer_t val)
+int compare_and_swap(volatile pointer_t * ptr, pointer_t cmp, void * val)
 {
   char success;
 
   __asm__ __volatile__ ( "lock; cmpxchg16b %1\n\t setz %0"
       : "=q" (success), "=m" (*ptr), "+&a" (cmp.ptr), "+&d" (cmp.count)
-      : "b" (val.ptr), "c" (val.count)
+      : "b" (val), "c" (cmp.count + 1)
       : "cc" );
 
   return success;
@@ -63,17 +63,14 @@ void msqueue_put(msqueue_t * q, void * data)
 
     if (is_equal(tail, q->tail)) {
       if (next.ptr == NULL) {
-        pointer_t temp = { node, next.count + 1 };
-        if (compare_and_swap(&tail.ptr->next, next, temp)) break;
+        if (compare_and_swap(&tail.ptr->next, next, node)) break;
       } else {
-        pointer_t temp = { next.ptr, tail.count + 1 };
-        compare_and_swap(&q->tail, tail, temp);
+        compare_and_swap(&q->tail, tail, next.ptr);
       }
     }
   }
 
-  pointer_t temp = { node, tail.count + 1 };
-  compare_and_swap(&q->tail, tail, temp);
+  compare_and_swap(&q->tail, tail, node);
 }
 
 void * msqueue_get(msqueue_t * q)
@@ -95,16 +92,14 @@ void * msqueue_get(msqueue_t * q)
           return (void *) -1;
         }
 
-        pointer_t temp = { nextptr, tail.count + 1 };
-        compare_and_swap(&q->tail, tail, temp);
+        compare_and_swap(&q->tail, tail, nextptr);
       } else {
         /** This check is not in the paper. But it seems necessary. */
         if (nextptr == NULL) continue;
 
         data = nextptr->data;
 
-        pointer_t temp = { nextptr, head.count + 1 };
-        if (compare_and_swap(&q->head, head, temp)) break;
+        if (compare_and_swap(&q->head, head, nextptr)) break;
       }
     }
   }
