@@ -5,8 +5,8 @@
 typedef struct _fifo_node_t {
   size_t index;
   size_t count;
-  struct _fifo_node_t * next __attribute__((aligned(64)));
-  void * buffer[0] __attribute__((aligned(64)));
+  struct _fifo_node_t * volatile next __attribute__((aligned(64)));
+  void * volatile buffer[0] __attribute__((aligned(64)));
 } node_t;
 
 typedef fifo_handle_t handle_t;
@@ -14,7 +14,6 @@ typedef fifo_handle_t handle_t;
 #define fetch_and_add(p, v) __atomic_fetch_add(p, v, __ATOMIC_RELAXED)
 #define add_and_fetch(p, v) __atomic_add_fetch(p, v, __ATOMIC_RELAXED)
 #define compare_and_swap __sync_bool_compare_and_swap
-#define load(ptr) (* (void * volatile *) (ptr))
 #define spin_while(cond) while (cond) __asm__ ("pause")
 
 static inline node_t * new_node(size_t index, size_t size, node_t ** in)
@@ -102,7 +101,7 @@ static node_t * update(size_t index, node_t ** handle, int i, fifo_t * fifo)
         prev->next = node;
       } else {
         handle[2] = node;
-        spin_while((node = load(&prev->next)) == NULL);
+        spin_while((node = prev->next) == NULL);
       }
     }
 
@@ -133,7 +132,7 @@ void * fifo_get(fifo_t * fifo, handle_t * handle)
 
   /** Wait for data. */
   void * data;
-  spin_while((data = load(&node->buffer[li])) == NULL);
+  spin_while((data = node->buffer[li]) == NULL);
   node->buffer[li] = NULL;
 
   return data;
