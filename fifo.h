@@ -12,8 +12,10 @@ typedef struct {
 } fifo_t;
 
 typedef struct __attribute__((__packed__, aligned(64))){
-  struct _fifo_node_t * P;
-  struct _fifo_node_t * C;
+  struct {
+    size_t index;
+    struct _fifo_node_t * node;
+  } P, C;
 } fifo_handle_t;
 
 void fifo_init(fifo_t * fifo, size_t size, size_t width);
