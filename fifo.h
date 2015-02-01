@@ -18,6 +18,7 @@ typedef struct __attribute__((__packed__, aligned(64))){
 
 void fifo_init(fifo_t * fifo, size_t size, size_t width);
 void fifo_register(const fifo_t * fifo, fifo_handle_t * handle);
+void fifo_unregister(const fifo_t * fifo, fifo_handle_t * handle);
 void * fifo_get(fifo_t * fifo, fifo_handle_t * handle);
 void fifo_put(fifo_t * fifo, fifo_handle_t * handle, void * data);
 
