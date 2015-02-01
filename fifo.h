@@ -14,7 +14,6 @@ typedef struct {
 typedef struct __attribute__((__packed__, aligned(64))){
   struct _fifo_node_t * P;
   struct _fifo_node_t * C;
-  struct _fifo_node_t * F;
 } fifo_handle_t;
 
 void fifo_init(fifo_t * fifo, size_t size, size_t width);

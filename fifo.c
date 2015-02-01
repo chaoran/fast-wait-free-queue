@@ -16,35 +16,24 @@ typedef fifo_handle_t handle_t;
 #define compare_and_swap __sync_bool_compare_and_swap
 #define spin_while(cond) while (cond) __asm__ ("pause")
 
-static inline node_t * new_node(size_t index, size_t size, node_t ** in)
+static inline node_t * new_node(size_t index, size_t size)
 {
-  node_t * node = in ? *in : NULL;
+  size = sizeof(node_t) + sizeof(void * [size]);
 
-  if (node) {
-    *in = NULL;
-    node->count = 0;
-    node->next  = NULL;
-  } else {
-    size = sizeof(node_t) + sizeof(void * [size]);
+  node_t * node;
 
-    posix_memalign((void **) &node, 4096, size);
-    memset(node, 0, size);
-  }
+  posix_memalign((void **) &node, 4096, size);
+  memset(node, 0, size);
 
   node->index = index;
   return node;
 }
 
-static inline void try_free(node_t * node, size_t index, size_t nprocs,
-    node_t ** out)
+static inline void try_free(node_t * node, size_t index, size_t nprocs)
 {
   if (index > node->index) {
     if (add_and_fetch(&node->count, 1) == nprocs) {
-      if (*out) {
-        free(node);
-      } else {
-        *out = node;
-      }
+      free(node);
     }
   }
 }
@@ -55,14 +44,13 @@ void fifo_init(fifo_t * fifo, size_t size, size_t width)
   fifo->W = width;
   fifo->P = 0;
   fifo->C = 0;
-  fifo->T = new_node(0, size, NULL);
+  fifo->T = new_node(0, size);
 }
 
 void fifo_register(const fifo_t * fifo, handle_t * handle)
 {
   handle->P = fifo->T;
   handle->C = fifo->T;
-  handle->F = NULL;
 }
 
 void fifo_unregister(const fifo_t * fifo, handle_t * handle)
@@ -73,10 +61,8 @@ void fifo_unregister(const fifo_t * fifo, handle_t * handle)
 
   do {
     next = curr->next;
-    try_free(curr, curr->index + 1, fifo->W, &handle->F);
+    try_free(curr, curr->index + 1, fifo->W);
   } while ((curr = next));
-
-  free(handle->F);
 }
 
 static node_t * update(size_t index, node_t ** handle, int i, fifo_t * fifo)
@@ -88,24 +74,24 @@ static node_t * update(size_t index, node_t ** handle, int i, fifo_t * fifo)
 
     while (prev->index < index - 1) {
       node = prev->next;
-      try_free(prev, handle[1 - i]->index, fifo->W, &handle[2]);
+      try_free(prev, handle[1 - i]->index, fifo->W);
       prev = node;
     }
 
     node = prev->next;
 
     if (!node) {
-      node = new_node(index, fifo->S, &handle[2]);
+      node = new_node(index, fifo->S);
 
       if (compare_and_swap(&fifo->T, prev, node)) {
         prev->next = node;
       } else {
-        handle[2] = node;
+        free(node);
         spin_while((node = prev->next) == NULL);
       }
     }
 
-    try_free(prev, handle[1 - i]->index, fifo->W, &handle[2]);
+    try_free(prev, handle[1 - i]->index, fifo->W);
     handle[i] = node;
   }
 
