@@ -13,7 +13,7 @@ typedef fifo_handle_t handle_t;
 
 #define fetch_and_add(p, v) __atomic_fetch_add(p, v, __ATOMIC_RELAXED)
 #define add_and_fetch(p, v) __atomic_add_fetch(p, v, __ATOMIC_RELAXED)
-#define compare_and_swap __sync_bool_compare_and_swap
+#define compare_and_swap __sync_val_compare_and_swap
 #define spin_while(cond) while (cond) __asm__ ("pause")
 
 static inline node_t * new_node(size_t index, size_t size)
@@ -82,12 +82,11 @@ static node_t * update(size_t index, node_t ** handle, int i, fifo_t * fifo)
 
     if (!node) {
       node = new_node(index, fifo->S);
+      node_t * next;
 
-      if (compare_and_swap(&fifo->T, prev, node)) {
-        prev->next = node;
-      } else {
+      if ((next = compare_and_swap(&prev->next, NULL, node))) {
         free(node);
-        spin_while((node = prev->next) == NULL);
+        node = next;
       }
     }
 
