@@ -2,10 +2,16 @@
 #include <string.h>
 #include "fifo.h"
 
+typedef union {
+  void * volatile data;
+  char padding[64];
+} cache_t;
+
 typedef struct _fifo_node_t {
   size_t count;
   struct _fifo_node_t * volatile next __attribute__((aligned(64)));
-  void * volatile buffer[0] __attribute__((aligned(64)));
+  cache_t buffer[0] __attribute__((aligned(64)));
+  /*void * volatile buffer[0] __attribute__((aligned(64)));*/
 } node_t;
 
 typedef fifo_handle_t handle_t;
@@ -17,7 +23,7 @@ typedef fifo_handle_t handle_t;
 
 static inline node_t * new_node(size_t size)
 {
-  size = sizeof(node_t) + sizeof(void * [size]);
+  size = sizeof(node_t) + sizeof(cache_t [size]);
 
   node_t * node;
 
@@ -106,7 +112,7 @@ void fifo_put(fifo_t * fifo, handle_t * handle, void * data)
     handle->P.index = ni;
   }
 
-  node->buffer[li] = data;
+  node->buffer[li].data = data;
 }
 
 void * fifo_get(fifo_t * fifo, handle_t * handle)
@@ -125,8 +131,8 @@ void * fifo_get(fifo_t * fifo, handle_t * handle)
 
   /** Wait for data. */
   void * data;
-  spin_while((data = node->buffer[li]) == NULL);
-  node->buffer[li] = NULL;
+  spin_while((data = node->buffer[li].data) == NULL);
+  node->buffer[li].data = NULL;
 
   return data;
 }
@@ -139,7 +145,7 @@ static fifo_t fifo;
 
 void init(int nprocs)
 {
-  fifo_init(&fifo, 512, nprocs);
+  fifo_init(&fifo, 510, nprocs);
 }
 
 void thread_init(int id, void * handle)

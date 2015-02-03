@@ -364,5 +364,6 @@ void init(int nprocs)
 }
 
 void thread_init(int id, void * args) {}
+void thread_exit(int id, void * args) {}
 
 #endif

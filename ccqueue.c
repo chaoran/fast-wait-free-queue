@@ -24,6 +24,8 @@ void thread_init(int id, void * args)
   queueThreadStateInit(&queue_object, &state->lqueue_struct, id);
 }
 
+void thread_exit(int id, void * args) {}
+
 void enqueue(void * val, void * args)
 {
   thread_local_t * state = (thread_local_t *) args;
