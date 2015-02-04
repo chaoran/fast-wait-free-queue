@@ -10,8 +10,8 @@ typedef union {
 typedef struct _fifo_node_t {
   size_t count;
   struct _fifo_node_t * volatile next __attribute__((aligned(64)));
+  size_t index;
   cache_t buffer[0] __attribute__((aligned(64)));
-  /*void * volatile buffer[0] __attribute__((aligned(64)));*/
 } node_t;
 
 typedef fifo_handle_t handle_t;
@@ -21,7 +21,7 @@ typedef fifo_handle_t handle_t;
 #define compare_and_swap __sync_val_compare_and_swap
 #define spin_while(cond) while (cond) __asm__ ("pause")
 
-static inline node_t * new_node(size_t size)
+static inline node_t * new_node(size_t index, size_t size)
 {
   size = sizeof(node_t) + sizeof(cache_t [size]);
 
@@ -30,6 +30,7 @@ static inline node_t * new_node(size_t size)
   posix_memalign((void **) &node, 4096, size);
   memset(node, 0, size);
 
+  node->index = index;
   return node;
 }
 
@@ -46,22 +47,20 @@ void fifo_init(fifo_t * fifo, size_t size, size_t width)
   fifo->W = width;
   fifo->P = 0;
   fifo->C = 0;
-  fifo->T = new_node(size);
+  fifo->T = new_node(0, size);
 }
 
 void fifo_register(const fifo_t * fifo, handle_t * handle)
 {
-  handle->P.index = 0;
-  handle->P.node  = fifo->T;
-  handle->C.index = 0;
-  handle->C.node  = fifo->T;
+  handle->P = fifo->T;
+  handle->C = fifo->T;
 }
 
 void fifo_unregister(const fifo_t * fifo, handle_t * handle)
 {
   node_t * curr, * next;
 
-  curr = handle->P.index > handle->C.index ? handle->C.node : handle->P.node;
+  curr = handle->P->index > handle->C->index ? handle->C : handle->P;
 
   do {
     next = curr->next;
@@ -69,20 +68,20 @@ void fifo_unregister(const fifo_t * fifo, handle_t * handle)
   } while ((curr = next));
 }
 
-static node_t * update(node_t * node, size_t to, size_t from, size_t other,
+static node_t * update(node_t * node, size_t to, size_t other,
     fifo_t * fifo)
 {
   size_t i;
   node_t * prev;
   node_t * next = NULL;
 
-  for (i = from; i < to; ++i) {
+  for (i = node->index; i < to; ++i) {
     prev = node;
     node = prev->next;
 
     if (!node) {
       if (!next) {
-        next = new_node(fifo->S);
+        next = new_node(i + 1, fifo->S);
       }
 
       if (NULL == (node = compare_and_swap(&prev->next, NULL, next))) {
@@ -104,12 +103,11 @@ void fifo_put(fifo_t * fifo, handle_t * handle, void * data)
   size_t ni = i / fifo->S;
   size_t li = i % fifo->S;
 
-  node_t * node = handle->P.node;
-  size_t  index = handle->P.index;
+  node_t * node = handle->P;
+  size_t  index = node->index;
 
   if (index != ni) {
-    node = handle->P.node = update(node, ni, index, handle->C.index, fifo);
-    handle->P.index = ni;
+    node = handle->P = update(node, ni, handle->C->index, fifo);
   }
 
   node->buffer[li].data = data;
@@ -121,18 +119,16 @@ void * fifo_get(fifo_t * fifo, handle_t * handle)
   size_t ni = i / fifo->S;
   size_t li = i % fifo->S;
 
-  node_t * node = handle->C.node;
-  size_t  index = handle->C.index;
+  node_t * node = handle->C;
+  size_t  index = node->index;
 
   if (index != ni) {
-    node = handle->C.node = update(node, ni, index, handle->P.index, fifo);
-    handle->C.index = ni;
+    node = handle->C = update(node, ni, handle->P->index, fifo);
   }
 
   /** Wait for data. */
   void * data;
   spin_while((data = node->buffer[li].data) == NULL);
-  node->buffer[li].data = NULL;
 
   return data;
 }
