@@ -1,4 +1,4 @@
-CFLAGS = -O3 \
+CFLAGS = -g -O3 \
 				 -pthread -D_GNU_SOURCE -DBENCHMARK -DMAX_THREADS=512 \
          -ftree-vectorize -ftree-vectorizer-verbose=0 \
          -msse3 -march=native -mtune=native
