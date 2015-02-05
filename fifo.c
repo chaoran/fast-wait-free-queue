@@ -22,7 +22,7 @@ typedef struct _fifo_node_t {
 typedef struct _fifo_pair_t pair_t;
 typedef fifo_handle_t handle_t;
 
-#define fetch_and_add(p, v) __atomic_fetch_add(p, v, __ATOMIC_RELAXED)
+#define fetch_and_add(p, v) __atomic_fetch_add(p, v, __ATOMIC_ACQ_REL)
 #define compare_and_swap __sync_val_compare_and_swap
 #define test_and_set(p) __atomic_test_and_set(p, __ATOMIC_RELAXED)
 #define spin_while(cond) while (cond) __asm__ ("pause")
