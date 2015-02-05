@@ -28,8 +28,8 @@ typedef fifo_handle_t handle_t;
 #define spin_while(cond) while (cond) __asm__ ("pause")
 
 #define ENQ (0)
-#define DEQ (64 / sizeof(void *))
-#define ALT(i) (DEQ - i)
+#define DEQ (1)
+#define ALT(i) (1 - i)
 
 static inline
 node_t * new_node(size_t id, size_t size)
@@ -145,7 +145,7 @@ node_t * update(node_t * node, size_t to, size_t size)
 static inline
 void * volatile * acquire(fifo_t * fifo, handle_t * handle, int op)
 {
-  size_t i  = fetch_and_add(&fifo->index[op], 1);
+  size_t i  = fetch_and_add(&fifo->tail[op].index, 1);
   size_t ni = i / fifo->S;
   size_t li = i % fifo->S;
 
@@ -154,7 +154,6 @@ void * volatile * acquire(fifo_t * fifo, handle_t * handle, int op)
   if (node->id != ni) {
     node_t * prev = node;
     node = update(prev, ni, fifo->S);
-    assert(node->id > prev->id);
 
     handle->node[op] = node;
 
@@ -192,8 +191,8 @@ void fifo_init(fifo_t * fifo, size_t size, size_t width)
 
   node_t * node = new_node(0, size);
 
-  fifo->index[ENQ] = 0;
-  fifo->index[DEQ] = 0;
+  fifo->tail[ENQ].index = 0;
+  fifo->tail[DEQ].index = 0;
   fifo->T = node;
 
   fifo->plist = NULL;
