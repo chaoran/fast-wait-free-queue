@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 #include "fifo.h"
@@ -21,14 +22,17 @@ typedef struct _fifo_node_t {
 typedef struct _fifo_pair_t pair_t;
 typedef fifo_handle_t handle_t;
 
-#define fetch_and_add(p, v) __atomic_fetch_add(p, v, __ATOMIC_ACQ_REL)
+#define fetch_and_add(p, v) __atomic_fetch_add(p, v, __ATOMIC_RELAXED)
 #define compare_and_swap __sync_val_compare_and_swap
 #define test_and_set(p) __atomic_test_and_set(p, __ATOMIC_RELAXED)
-#define acquire_fence() __atomic_thread_fence(__ATOMIC_ACQUIRE)
-#define release_fence() __atomic_thread_fence(__ATOMIC_RELEASE)
 #define spin_while(cond) while (cond) __asm__ ("pause")
 
-static inline node_t * new_node(size_t id, size_t size)
+#define ENQ (0)
+#define DEQ (64 / sizeof(void *))
+#define ALT(i) (DEQ - i)
+
+static inline
+node_t * new_node(size_t id, size_t size)
 {
   size = sizeof(node_t) + sizeof(cache_t [size]);
 
@@ -41,20 +45,23 @@ static inline node_t * new_node(size_t id, size_t size)
   return node;
 }
 
-static inline int push(handle_t * list, node_t * node)
+static inline
+int push(handle_t * rlist, node_t * node)
 {
-  if (list->tail == NULL) {
-    list->head = node;
-    list->tail = node;
+  if (rlist->tail == NULL) {
+    rlist->head = node;
+    rlist->tail = node;
   } else {
-    list->tail->retired.next = node;
-    list->tail = node;
+    assert(rlist->tail->id < node->id);
+    rlist->tail->retired.next = node;
+    rlist->tail = node;
   }
 
-  return ++list->count;
+  return ++rlist->count;
 }
 
-static inline size_t scan(handle_t * plist, size_t lowest)
+static inline
+size_t scan(handle_t * plist, size_t lowest)
 {
   size_t hazard = -1;
 
@@ -69,7 +76,8 @@ static inline size_t scan(handle_t * plist, size_t lowest)
   return hazard;
 }
 
-static inline void clean(handle_t * rlist, size_t hazard)
+static inline
+void clean(handle_t * rlist, size_t hazard)
 {
   node_t * curr = rlist->head;
 
@@ -88,9 +96,10 @@ static inline void clean(handle_t * rlist, size_t hazard)
   }
 }
 
-static inline void try_free(node_t * node, handle_t * handle, fifo_t * fifo)
+static inline
+void try_free(node_t * node, handle_t * handle, fifo_t * fifo)
 {
-  if (test_and_set(&node->retired.flag)) {
+  if (!test_and_set(&node->retired.flag)) {
     int count = push(handle, node);
 
     if (count >= 2 * fifo->W) {
@@ -104,7 +113,8 @@ static inline void try_free(node_t * node, handle_t * handle, fifo_t * fifo)
   }
 }
 
-static inline node_t * update(node_t * node, size_t to, size_t size)
+static inline
+node_t * update(node_t * node, size_t to, size_t size)
 {
   size_t i;
   node_t * prev;
@@ -127,26 +137,32 @@ static inline node_t * update(node_t * node, size_t to, size_t size)
   }
 
   if (next) free(next);
+
+  assert(node->id == to);
   return node;
 }
 
-static inline void * volatile * acquire(pair_t * pair,
-    fifo_t * fifo, handle_t * handle)
+static inline
+void * volatile * acquire(fifo_t * fifo, handle_t * handle, int op)
 {
-  node_t * node = pair->node;
-  size_t id = node->id;
-
-  handle->hazard = id;
-
-  size_t i  = fetch_and_add(&pair->index, 1);
+  size_t i  = fetch_and_add(&fifo->index[op], 1);
   size_t ni = i / fifo->S;
   size_t li = i % fifo->S;
 
-  if (id != ni) {
+  node_t * node = handle->node[op];
+
+  if (node->id != ni) {
     node_t * prev = node;
     node = update(prev, ni, fifo->S);
+    assert(node->id > prev->id);
 
-    if (prev == compare_and_swap(&pair->node, prev, node)) {
+    handle->node[op] = node;
+
+    size_t hazard = handle->hazard;
+    size_t other  = handle->node[ALT(op)]->id;
+
+    if (prev->id == hazard && other > hazard) {
+      handle->hazard = node->id > other ? other : node->id;
       try_free(prev, handle, fifo);
     }
   }
@@ -154,29 +170,18 @@ static inline void * volatile * acquire(pair_t * pair,
   return &node->buffer[li].data;
 }
 
-static inline void release(handle_t * handle)
-{
-  handle->hazard = -1;
-}
-
 void fifo_put(fifo_t * fifo, handle_t * handle, void * data)
 {
-  void * volatile * ptr = acquire(&fifo->P, fifo, handle);
-
+  void * volatile * ptr = acquire(fifo, handle, ENQ);
   *ptr = data;
-
-  release(handle);
 }
 
 void * fifo_get(fifo_t * fifo, handle_t * handle)
 {
-  void * volatile * ptr = acquire(&fifo->C, fifo, handle);
-
-  /** Wait for data. */
+  void * volatile * ptr = acquire(fifo, handle, DEQ);
   void * data;
-  spin_while((data = *ptr) == NULL);
 
-  release(handle);
+  spin_while((data = *ptr) == NULL);
   return data;
 }
 
@@ -187,10 +192,9 @@ void fifo_init(fifo_t * fifo, size_t size, size_t width)
 
   node_t * node = new_node(0, size);
 
-  fifo->P.index = 0;
-  fifo->P.node  = node;
-  fifo->C.index = 0;
-  fifo->C.node  = node;
+  fifo->index[ENQ] = 0;
+  fifo->index[DEQ] = 0;
+  fifo->T = node;
 
   fifo->plist = NULL;
 }
@@ -199,8 +203,10 @@ void fifo_register(fifo_t * fifo, handle_t * me)
 {
   me->head = NULL;
   me->tail = NULL;
-  me->hazard = -1;
-  me->count  =  0;
+  me->count  = 0;
+  me->node[ENQ] = fifo->T;
+  me->node[DEQ] = fifo->T;
+  me->hazard = 0;
 
   handle_t * curr = fifo->plist;
 
@@ -211,6 +217,8 @@ void fifo_register(fifo_t * fifo, handle_t * me)
 
 void fifo_unregister(fifo_t * fifo, handle_t * handle)
 {
+  handle->hazard = -1;
+
   while (handle->head) {
     size_t lowest = handle->head->id;
     size_t hazard = scan(fifo->plist, lowest);
