@@ -68,8 +68,12 @@ size_t scan(handle_t * plist, size_t lowest)
   handle_t * p;
 
   for (p = plist; hazard > lowest && p != NULL; p = p->next) {
-    if (p->hazard < hazard) {
-      hazard = p->hazard;
+    if (p->node[ENQ] && p->node[ENQ]->id < hazard) {
+      hazard = p->node[ENQ]->id;
+    }
+
+    if (p->node[DEQ] && p->node[DEQ]->id < hazard) {
+      hazard = p->node[DEQ]->id;
     }
   }
 
@@ -157,11 +161,7 @@ void * volatile * acquire(fifo_t * fifo, handle_t * handle, int op)
 
     handle->node[op] = node;
 
-    size_t hazard = handle->hazard;
-    size_t other  = handle->node[ALT(op)]->id;
-
-    if (prev->id == hazard && other > hazard) {
-      handle->hazard = node->id > other ? other : node->id;
+    if (prev->id < handle->node[ALT(op)]->id) {
       try_free(prev, handle, fifo);
     }
   }
@@ -205,7 +205,6 @@ void fifo_register(fifo_t * fifo, handle_t * me)
   me->count  = 0;
   me->node[ENQ] = fifo->T;
   me->node[DEQ] = fifo->T;
-  me->hazard = 0;
 
   handle_t * curr = fifo->plist;
 
@@ -216,7 +215,14 @@ void fifo_register(fifo_t * fifo, handle_t * me)
 
 void fifo_unregister(fifo_t * fifo, handle_t * handle)
 {
-  handle->hazard = -1;
+  node_t * enq = handle->node[ENQ];
+  node_t * deq = handle->node[DEQ];
+
+  handle->node[ENQ] = NULL;
+  handle->node[DEQ] = NULL;
+
+  try_free(enq, handle, fifo);
+  try_free(deq, handle, fifo);
 
   while (handle->head) {
     size_t lowest = handle->head->id;
