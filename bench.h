@@ -58,7 +58,6 @@ static inline size_t rand_next(rand_state_t state)
   return state / 65536 % 32768;
 }
 
-
 static void * bench(void * id_)
 {
   void thread_init(int id, void *);
@@ -105,6 +104,7 @@ static void * bench(void * id_)
 
   results[id] = val;
   thread_exit(id, &locals);
+  pthread_barrier_wait(&barrier);
   return NULL;
 }
 
