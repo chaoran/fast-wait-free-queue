@@ -54,25 +54,6 @@ static inline int push(handle_t * list, node_t * node)
   return ++list->count;
 }
 
-static inline void clean(handle_t * list, size_t hazard)
-{
-  node_t * curr = list->head;
-
-  while ((curr = list->head)) {
-    if (curr->id < hazard) {
-      list->head = curr->retired.next;
-      list->count--;
-      free(curr);
-    } else {
-      return;
-    }
-  }
-
-  if (list->head == NULL) {
-    list->tail = NULL;
-  }
-}
-
 static inline size_t scan(handle_t * plist, size_t lowest)
 {
   size_t hazard = -1;
@@ -86,6 +67,25 @@ static inline size_t scan(handle_t * plist, size_t lowest)
   }
 
   return hazard;
+}
+
+static inline void clean(handle_t * rlist, size_t hazard)
+{
+  node_t * curr = rlist->head;
+
+  while ((curr = rlist->head)) {
+    if (curr->id < hazard) {
+      rlist->head = curr->retired.next;
+      rlist->count--;
+      free(curr);
+    } else {
+      return;
+    }
+  }
+
+  if (rlist->head == NULL) {
+    rlist->tail = NULL;
+  }
 }
 
 static inline void try_free(node_t * node, handle_t * handle, fifo_t * fifo)
