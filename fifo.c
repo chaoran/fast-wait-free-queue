@@ -61,6 +61,7 @@ static inline void clean(handle_t * list, size_t hazard)
   while ((curr = list->head)) {
     if (curr->id < hazard) {
       list->head = curr->retired.next;
+      list->count--;
       free(curr);
     } else {
       return;
@@ -92,7 +93,7 @@ static inline void try_free(node_t * node, handle_t * handle, fifo_t * fifo)
   if (test_and_set(&node->retired.flag)) {
     int count = push(handle, node);
 
-    if (count >= 1 * fifo->W) {
+    if (count >= 2 * fifo->W) {
       size_t lowest = handle->head->id;
       size_t hazard = scan(fifo->plist, lowest);
 
