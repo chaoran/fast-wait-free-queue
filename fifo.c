@@ -21,7 +21,7 @@ typedef struct _fifo_node_t {
 typedef struct _fifo_pair_t pair_t;
 typedef fifo_handle_t handle_t;
 
-#define fetch_and_add(p, v) __atomic_fetch_add(p, v, __ATOMIC_RELAXED)
+#define fetch_and_add(p, v) __atomic_fetch_add(p, v, __ATOMIC_ACQ_REL)
 #define compare_and_swap __sync_val_compare_and_swap
 #define test_and_set(p) __atomic_test_and_set(p, __ATOMIC_RELAXED)
 #define acquire_fence() __atomic_thread_fence(__ATOMIC_ACQUIRE)
@@ -137,7 +137,6 @@ static inline void * volatile * acquire(pair_t * pair,
   size_t id = node->id;
 
   handle->hazard = id;
-  acquire_fence();
 
   size_t i  = fetch_and_add(&pair->index, 1);
   size_t ni = i / fifo->S;
@@ -150,9 +149,6 @@ static inline void * volatile * acquire(pair_t * pair,
     if (prev == compare_and_swap(&pair->node, prev, node)) {
       try_free(prev, handle, fifo);
     }
-
-    handle->hazard = id;
-    acquire_fence();
   }
 
   return &node->buffer[li].data;
@@ -161,7 +157,6 @@ static inline void * volatile * acquire(pair_t * pair,
 static inline void release(handle_t * handle)
 {
   handle->hazard = -1;
-  release_fence();
 }
 
 void fifo_put(fifo_t * fifo, handle_t * handle, void * data)
