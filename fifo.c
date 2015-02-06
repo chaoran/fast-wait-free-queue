@@ -1,5 +1,3 @@
-#include <stdio.h>
-#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 #include "fifo.h"
@@ -57,7 +55,6 @@ void retire(handle_t * rlist, node_t * node)
     rlist->head = node;
     rlist->tail = node;
   } else {
-    assert(rlist->tail->id < node->id);
     rlist->tail->retired.next = node;
     rlist->tail = node;
   }
@@ -142,8 +139,6 @@ node_t * update(node_t * node, size_t to, size_t size)
   }
 
   if (next) free(next);
-
-  assert(node->id == to);
   return node;
 }
 
