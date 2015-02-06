@@ -17,9 +17,11 @@ typedef struct {
 typedef struct __attribute__((__packed__, aligned(64))) _fifo_handle_t {
   struct _fifo_handle_t * next;
   struct _fifo_node_t * node[2];
+  size_t index[2];
   struct _fifo_node_t * head;
   struct _fifo_node_t * tail;
   unsigned count;
+  struct _fifo_node_t * hazard __attribute__((aligned(64)));
 } fifo_handle_t;
 
 void fifo_init(fifo_t * fifo, size_t size, size_t width);
