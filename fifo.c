@@ -46,8 +46,13 @@ node_t * new_node(size_t id, size_t size)
 }
 
 static inline
-int push(handle_t * rlist, node_t * node)
+void retire(handle_t * rlist, node_t * node)
 {
+  /** Only retire each node once. */
+  if (test_and_set(&node->retired.flag)) {
+    return;
+  }
+
   if (rlist->tail == NULL) {
     rlist->head = node;
     rlist->tail = node;
@@ -57,63 +62,59 @@ int push(handle_t * rlist, node_t * node)
     rlist->tail = node;
   }
 
-  return ++rlist->count;
+  rlist->count += 1;
+  return;
 }
 
 static inline
-size_t scan(handle_t * plist, size_t lowest)
+void cleanup(handle_t * plist, handle_t * rlist, int nprocs)
 {
-  size_t hazard = -1;
+  const int threshold = 2 * nprocs;
 
+  /** Do nothing if we haven't reach threshold. */
+  if (rlist->count < threshold) {
+    return;
+  }
+
+  size_t bar = -1;
+  size_t min = rlist->head->id;
+
+  /** Scan plist to find the lowest bar. */
   handle_t * p;
-
-  for (p = plist; hazard > lowest && p != NULL; p = p->next) {
-    if (p->node[ENQ] && p->node[ENQ]->id < hazard) {
-      hazard = p->node[ENQ]->id;
+  for (p = plist; p != NULL; p = p->next) {
+    if (p->node[ENQ]->id < bar) {
+      bar = p->node[ENQ]->id;
+      if (bar <= min) return;
     }
 
-    if (p->node[DEQ] && p->node[DEQ]->id < hazard) {
-      hazard = p->node[DEQ]->id;
+    if (p->node[DEQ]->id < bar) {
+      bar = p->node[DEQ]->id;
+      if (bar <= min) return;
     }
   }
 
-  return hazard;
-}
-
-static inline
-void clean(handle_t * rlist, size_t hazard)
-{
+  /** Scan rlist to free nodes that is lower than the bar. */
+  int count = rlist->count;
   node_t * curr = rlist->head;
+  node_t * next = NULL;
 
-  while ((curr = rlist->head)) {
-    if (curr->id < hazard) {
-      rlist->head = curr->retired.next;
-      rlist->count--;
+  do {
+    if (curr->id < bar) {
+      count--;
+      next = curr->retired.next;
       free(curr);
+      curr = next;
     } else {
-      return;
+      next = curr;
+      curr = NULL;
     }
-  }
+  } while (curr);
+
+  rlist->count = count;
+  rlist->head  = next;
 
   if (rlist->head == NULL) {
     rlist->tail = NULL;
-  }
-}
-
-static inline
-void try_free(node_t * node, handle_t * handle, fifo_t * fifo)
-{
-  if (!test_and_set(&node->retired.flag)) {
-    int count = push(handle, node);
-
-    if (count >= 2 * fifo->W) {
-      size_t lowest = handle->head->id;
-      size_t hazard = scan(fifo->plist, lowest);
-
-      if (hazard > lowest) {
-        clean(handle, hazard);
-      }
-    }
   }
 }
 
@@ -149,30 +150,38 @@ node_t * update(node_t * node, size_t to, size_t size)
 static inline
 void * volatile * acquire(fifo_t * fifo, handle_t * handle, int op)
 {
+  size_t s  = fifo->S;
   size_t i  = fetch_and_add(&fifo->tail[op].index, 1);
-  size_t ni = i / fifo->S;
-  size_t li = i % fifo->S;
+  size_t ni = i / s;
+  size_t li = i % s;
 
   node_t * node = handle->node[op];
 
   if (node->id != ni) {
     node_t * prev = node;
-    node = update(prev, ni, fifo->S);
+    node = update(prev, ni, s);
 
     handle->node[op] = node;
 
     if (prev->id < handle->node[ALT(op)]->id) {
-      try_free(prev, handle, fifo);
+      retire(handle, prev);
     }
   }
 
   return &node->buffer[li].data;
 }
 
+static inline
+void release(fifo_t * fifo, handle_t * handle)
+{
+  cleanup(fifo->plist, handle, fifo->W);
+}
+
 void fifo_put(fifo_t * fifo, handle_t * handle, void * data)
 {
   void * volatile * ptr = acquire(fifo, handle, ENQ);
   *ptr = data;
+  release(fifo, handle);
 }
 
 void * fifo_get(fifo_t * fifo, handle_t * handle)
@@ -181,6 +190,8 @@ void * fifo_get(fifo_t * fifo, handle_t * handle)
   void * data;
 
   spin_while((data = *ptr) == NULL);
+
+  release(fifo, handle);
   return data;
 }
 
@@ -213,24 +224,28 @@ void fifo_register(fifo_t * fifo, handle_t * me)
   } while (me->next != (curr = compare_and_swap(&fifo->plist, curr, me)));
 }
 
-void fifo_unregister(fifo_t * fifo, handle_t * handle)
+void fifo_unregister(fifo_t * fifo, handle_t * me)
 {
-  node_t * enq = handle->node[ENQ];
-  node_t * deq = handle->node[DEQ];
+  /** Remove myself from plist. */
+  handle_t * p = fifo->plist;
 
-  handle->node[ENQ] = NULL;
-  handle->node[DEQ] = NULL;
-
-  try_free(enq, handle, fifo);
-  try_free(deq, handle, fifo);
-
-  while (handle->head) {
-    size_t lowest = handle->head->id;
-    size_t hazard = scan(fifo->plist, lowest);
-
-    if (hazard > lowest) {
-      clean(handle, hazard);
+  if (p == me) {
+    fifo->plist = me->next;
+  } else {
+    while (p->next != me) {
+      p = p->next;
     }
+
+    p->next = me->next;
+  }
+
+  /** Retire my nodes. */
+  retire(me, me->node[ENQ]);
+  retire(me, me->node[DEQ]);
+
+  /** Clean my retired nodes. */
+  while (me->head) {
+    cleanup(fifo->plist, me, fifo->W);
   }
 }
 
