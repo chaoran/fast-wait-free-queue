@@ -24,8 +24,8 @@ typedef fifo_handle_t handle_t;
 #define fetch_and_add(p, v) __atomic_fetch_add(p, v, __ATOMIC_RELAXED)
 #define compare_and_swap __sync_val_compare_and_swap
 #define test_and_set(p) __atomic_test_and_set(p, __ATOMIC_RELAXED)
-#define swap(p, v) __atomic_exchange_n(p, v, __ATOMIC_ACQ_REL)
-#define clear(p) __atomic_store_n(p, NULL, __ATOMIC_RELEASE)
+#define store(p, v) __atomic_store_n(p, v, __ATOMIC_RELEASE)
+#define load(p) __atomic_load_n(p, __ATOMIC_ACQUIRE)
 #define spin_while(cond) while (cond) __asm__ ("pause")
 
 #define ENQ (0)
@@ -160,8 +160,8 @@ void * volatile * acquire(fifo_t * fifo, handle_t * handle, int op)
 
   do {
     node = temp;
-    __atomic_store_n(&handle->hazard, node, __ATOMIC_RELEASE);
-    temp = __atomic_load_n(&handle->node[op], __ATOMIC_ACQUIRE);
+    store(&handle->hazard, node);
+    temp = load(&handle->node[op]);
   } while (node != temp);
 
   size_t s  = fifo->S;
@@ -169,13 +169,10 @@ void * volatile * acquire(fifo_t * fifo, handle_t * handle, int op)
   size_t ni = i / s;
   size_t li = i % s;
 
-  node = handle->node[op];
-
   if (node->id != ni) {
     node_t * prev = node;
     node = update(prev, ni, s);
 
-    handle->index[op] = ni;
     handle->node[op]  = node;
 
     if (prev->id < handle->node[ALT(op)]->id) {
@@ -189,14 +186,14 @@ void * volatile * acquire(fifo_t * fifo, handle_t * handle, int op)
 static inline
 void release(fifo_t * fifo, handle_t * handle)
 {
-  const int threshold = 2 * fifo->W;
+  const int threshold = 1 * fifo->W;
 
   /** Do nothing if we haven't reach threshold. */
   if (handle->count >= threshold) {
     cleanup(fifo->plist, handle);
   }
 
-  clear(&handle->hazard);
+  store(&handle->hazard, NULL);
 }
 
 void fifo_put(fifo_t * fifo, handle_t * handle, void * data)
@@ -233,8 +230,6 @@ void fifo_init(fifo_t * fifo, size_t size, size_t width)
 
 void fifo_register(fifo_t * fifo, handle_t * me)
 {
-  me->index[ENQ] = 0;
-  me->index[DEQ] = 0;
   me->node[ENQ]  = fifo->T;
   me->node[DEQ]  = fifo->T;
   me->head = NULL;
@@ -251,37 +246,6 @@ void fifo_register(fifo_t * fifo, handle_t * me)
 
 void fifo_unregister(fifo_t * fifo, handle_t * me)
 {
-  node_t * node = swap(&me->hazard, NULL);
-
-  if (node) {
-    if (node->id > me->index[ENQ]) {
-      me->index[ENQ] = node->id;
-      me->node [ENQ] = node;
-    }
-
-    if (node->id > me->index[DEQ]) {
-      me->index[DEQ] = node->id;
-      me->node [DEQ] = node;
-    }
-  }
-
-  /** Remove myself from plist. */
-  /*handle_t * p = fifo->plist;*/
-
-  /*if (p == me) {*/
-    /*fifo->plist = me->next;*/
-  /*} else {*/
-    /*while (p->next != me) {*/
-      /*p = p->next;*/
-    /*}*/
-
-    /*p->next = me->next;*/
-  /*}*/
-
-  /** Retire my nodes. */
-  /*retire(me, me->node[ENQ]);*/
-  /*retire(me, me->node[DEQ]);*/
-
   /** Clean my retired nodes. */
   while (me->head) {
     cleanup(fifo->plist, me);
