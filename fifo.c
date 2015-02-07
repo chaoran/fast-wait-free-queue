@@ -18,7 +18,6 @@ typedef struct _fifo_node_t {
   cache_t buffer[0] __attribute__((aligned(64)));
 } node_t;
 
-typedef struct _fifo_pair_t pair_t;
 typedef fifo_handle_t handle_t;
 
 #define fetch_and_add(p, v) __atomic_fetch_add(p, v, __ATOMIC_RELAXED)
