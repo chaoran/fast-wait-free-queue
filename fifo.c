@@ -78,31 +78,24 @@ void cleanup(handle_t * plist, handle_t * rlist)
 
   /** Scan plist to find the lowest bar. */
   handle_t * p;
+
   for (p = plist; p != NULL; p = p->next) {
     node_t * node = p->hazard;
 
-    while (node != (void *) -1 && node != NULL && node->id < hazard->id) {
-      node = compare_and_swap(&p->hazard, node, hazard);
-    }
-
-    if (node != (void *) -1 && node != NULL) {
-      assert(node->id >= hazard->id);
-      continue;
-    }
-
     int i;
     for (i = 0; i < 2; ++i) {
+      node_t * node = p->node[i];
+
       if (p->node[i]->id < bar) {
-        while (node != (void *) -1 && (!node || node->id < hazard->id)) {
-          node = compare_and_swap(&p->hazard, node, hazard);
+        if (p->hazard == NULL) {
+          node_t * curr = compare_and_swap(&p->node[i], node, hazard);
+
+          if (curr == node) continue;
+          else node = curr;
         }
 
-        if (node == (void *) -1) {
-          bar = p->node[i]->id;
-          if (bar <= min) return;
-        } else {
-          assert(node->id >= hazard->id);
-        }
+        bar = p->node[i]->id;
+        if (bar <= min) return;
       }
     }
   }
@@ -162,20 +155,14 @@ node_t * update(node_t * node, size_t to, size_t size)
 static inline
 void * volatile * acquire(fifo_t * fifo, handle_t * handle, int op)
 {
-  node_t * node = swap(&handle->hazard, (void *) -1);
+  node_t * node;
+  node_t * temp = handle->node[op];
 
-  /** Update expired node. */
-  if (node) {
-    if (node->id > handle->index[ENQ]) {
-      handle->index[ENQ] = node->id;
-      handle->node[ENQ]  = node;
-    }
-
-    if (node->id > handle->index[DEQ]) {
-      handle->index[DEQ] = node->id;
-      handle->node[DEQ]  = node;
-    }
-  }
+  do {
+    node = temp;
+    __atomic_store_n(&handle->hazard, node, __ATOMIC_RELEASE);
+    temp = __atomic_load_n(&handle->node[op], __ATOMIC_ACQUIRE);
+  } while (node != temp);
 
   size_t s  = fifo->S;
   size_t i  = fetch_and_add(&fifo->tail[op].index, 1);
