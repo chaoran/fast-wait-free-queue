@@ -26,6 +26,8 @@ typedef fifo_handle_t handle_t;
 #define store(p, v) __atomic_store_n(p, v, __ATOMIC_RELEASE)
 #define load(p) __atomic_load_n(p, __ATOMIC_ACQUIRE)
 #define spin_while(cond) while (cond) __asm__ ("pause")
+#define lock(p) spin_while(__atomic_test_and_set(p, __ATOMIC_ACQUIRE))
+#define unlock(p) __atomic_clear(p, __ATOMIC_RELEASE)
 
 #define ENQ (0)
 #define DEQ (1)
@@ -215,6 +217,7 @@ void * fifo_get(fifo_t * fifo, handle_t * handle)
 
 void fifo_init(fifo_t * fifo, size_t size, size_t width)
 {
+  fifo->lock = 0;
   fifo->S = size;
   fifo->W = width;
 
@@ -240,11 +243,28 @@ void fifo_register(fifo_t * fifo, handle_t * me)
 
   do {
     me->next = curr;
-  } while (me->next != (curr = compare_and_swap(&fifo->plist, curr, me)));
+    curr = compare_and_swap(&fifo->plist, curr, me);
+  } while (me->next != curr);
 }
+
 
 void fifo_unregister(fifo_t * fifo, handle_t * me)
 {
+  lock(&fifo->lock);
+
+  fifo->W -= 1;
+
+  handle_t * p = fifo->plist;
+
+  if (p == me) {
+    fifo->plist = me->next;
+  } else {
+    while (p->next != me) p = p->next;
+    p->next = me->next;
+  }
+
+  unlock(&fifo->lock);
+
   /** Clean my retired nodes. */
   while (me->head) {
     cleanup(fifo->plist, me);

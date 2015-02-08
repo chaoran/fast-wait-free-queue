@@ -4,6 +4,7 @@
 struct _fifo_node_t;
 
 typedef struct {
+  char lock;
   size_t S;
   size_t W;
   union {
