@@ -92,8 +92,12 @@ void cleanup(handle_t * plist, handle_t * rlist)
           node_t * prev = compare_and_swap(&p->node[i], node, hazard);
           node_t * curr = load(&p->hazard);
 
-          if (prev == node && (!curr || curr == hazard)) continue;
-          else node = prev;
+          if (prev == node && (!curr || curr == hazard)) {
+            retire(rlist, node);
+            continue;
+          } else {
+            node = prev;
+          }
         }
 
         bar = node->id;
