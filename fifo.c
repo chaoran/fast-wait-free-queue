@@ -91,7 +91,7 @@ void cleanup(handle_t * plist, handle_t * rlist)
         if (p->hazard == NULL) {
           node_t * curr = compare_and_swap(&p->node[i], node, hazard);
 
-          if (curr == node) continue;
+          if (curr == node && hazard == load(&p->hazard)) continue;
           else node = curr;
         }
 
