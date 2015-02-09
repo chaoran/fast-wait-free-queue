@@ -224,16 +224,17 @@ void fifo_init(fifo_t * fifo, size_t size, size_t width)
   node_t * node = new_node(0, size);
 
   fifo->tail[ENQ].index = 0;
+  fifo->tail[ENQ].node  = node;
   fifo->tail[DEQ].index = 0;
-  fifo->T = node;
+  fifo->tail[DEQ].node  = node;
 
   fifo->plist = NULL;
 }
 
 void fifo_register(fifo_t * fifo, handle_t * me)
 {
-  me->node[ENQ]  = fifo->T;
-  me->node[DEQ]  = fifo->T;
+  me->node[ENQ]  = fifo->tail[ENQ].node;
+  me->node[DEQ]  = fifo->tail[DEQ].node;
   me->head = NULL;
   me->tail = NULL;
   me->count  = 0;
@@ -250,6 +251,12 @@ void fifo_register(fifo_t * fifo, handle_t * me)
 
 void fifo_unregister(fifo_t * fifo, handle_t * me)
 {
+  /** Clean my retired nodes. */
+  while (me->head) {
+    cleanup(fifo->plist, me);
+  }
+
+  /** Remove myself from plist. */
   lock(&fifo->lock);
 
   fifo->W -= 1;
@@ -263,12 +270,12 @@ void fifo_unregister(fifo_t * fifo, handle_t * me)
     p->next = me->next;
   }
 
-  unlock(&fifo->lock);
-
-  /** Clean my retired nodes. */
-  while (me->head) {
-    cleanup(fifo->plist, me);
+  if (fifo->plist == NULL) {
+    fifo->tail[ENQ].node = me->node[ENQ];
+    fifo->tail[DEQ].node = me->node[DEQ];
   }
+
+  unlock(&fifo->lock);
 }
 
 #ifdef BENCHMARK

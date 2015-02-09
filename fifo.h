@@ -7,11 +7,11 @@ typedef struct {
   char lock;
   size_t S;
   size_t W;
-  union {
+  struct {
     size_t index;
-    char padding[64];
+    struct _fifo_node_t * node;
+    char padding[2 * sizeof(void *)];
   } tail[2] __attribute__((aligned(64)));
-  struct _fifo_node_t * T __attribute__((aligned(64)));
   struct _fifo_handle_t * plist __attribute__((aligned(64)));
 } fifo_t;
 
