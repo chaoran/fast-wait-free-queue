@@ -89,13 +89,14 @@ void cleanup(handle_t * plist, handle_t * rlist)
 
       if (p->node[i]->id < bar) {
         if (p->hazard == NULL) {
-          node_t * curr = compare_and_swap(&p->node[i], node, hazard);
+          node_t * prev = compare_and_swap(&p->node[i], node, hazard);
+          node_t * curr = load(&p->hazard);
 
-          if (curr == node && hazard == load(&p->hazard)) continue;
-          else node = curr;
+          if (prev == node && (!curr || curr == hazard)) continue;
+          else node = prev;
         }
 
-        bar = p->node[i]->id;
+        bar = node->id;
         if (bar <= min) return;
       }
     }
