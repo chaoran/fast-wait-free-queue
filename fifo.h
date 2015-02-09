@@ -10,7 +10,7 @@ typedef struct {
   struct {
     size_t index;
     struct _fifo_node_t * node;
-    char padding[2 * sizeof(void *)];
+    char padding[64 - 2 * sizeof(void *)];
   } tail[2] __attribute__((aligned(64)));
   struct _fifo_handle_t * plist __attribute__((aligned(64)));
 } fifo_t;
