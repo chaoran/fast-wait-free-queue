@@ -71,35 +71,36 @@ static inline
 void cleanup(handle_t * plist, handle_t * rlist)
 {
   /** Find the hazard node. */
-  node_t * hazard = rlist->node[ENQ]->id < rlist->node[DEQ]->id ?
+  node_t * mine = rlist->node[ENQ]->id < rlist->node[DEQ]->id ?
     rlist->node[ENQ] : rlist->node[DEQ];
 
-  size_t bar = hazard->id;
+  size_t bar = mine->id;
   size_t min = rlist->head->id;
 
   /** Scan plist to find the lowest bar. */
   handle_t * p;
 
   for (p = plist; p != NULL; p = p->next) {
-    node_t * node = p->hazard;
-
     int i;
     for (i = 0; i < 2; ++i) {
       node_t * node = p->node[i];
 
-      if (p->node[i]->id < bar) {
-        if (p->hazard == NULL) {
-          node_t * prev = compare_and_swap(&p->node[i], node, hazard);
-          node_t * curr = load(&p->hazard);
+      if (node->id < bar && p->hazard == NULL) {
+        node_t * prev = compare_and_swap(&p->node[i], node, mine);
+        node_t * curr = load(&p->hazard);
 
-          if (prev == node && (!curr || curr == hazard)) {
-            retire(rlist, node);
-            continue;
+        if (curr) {
+          node = curr;
+        } else {
+          if (prev == node) {
+            node = mine;
           } else {
             node = prev;
           }
         }
+      }
 
+      if (node->id < bar) {
         bar = node->id;
         if (bar <= min) return;
       }
@@ -162,13 +163,13 @@ static inline
 void * volatile * acquire(fifo_t * fifo, handle_t * handle, int op)
 {
   node_t * node;
-  node_t * temp = handle->node[op];
+  node_t * curr = handle->node[op];
 
   do {
-    node = temp;
+    node = curr;
     store(&handle->hazard, node);
-    temp = load(&handle->node[op]);
-  } while (node != temp);
+    curr = load(&handle->node[op]);
+  } while (node != curr);
 
   size_t s  = fifo->S;
   size_t i  = fetch_and_add(&fifo->tail[op].index, 1);
