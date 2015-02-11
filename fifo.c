@@ -53,7 +53,7 @@ static inline
 void retire(handle_t * rlist, node_t * node)
 {
   /** Only retire each node once. */
-  if (test_and_set(&node->retired.flag)) {
+  if (node->retired.flag || test_and_set(&node->retired.flag)) {
     return;
   }
 
