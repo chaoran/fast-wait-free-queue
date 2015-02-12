@@ -207,6 +207,18 @@ void release(fifo_t * fifo, handle_t * handle)
   store(&handle->hazard, NULL);
 }
 
+void * fifo_test(fifo_t * fifo, handle_t * handle)
+{
+  void * val = *handle->ptr;
+
+  if (val) {
+    release(fifo, handle);
+    handle->ptr = NULL;
+  }
+
+  return val;
+}
+
 void fifo_put(fifo_t * fifo, handle_t * handle, void * data)
 {
   void * volatile * ptr = acquire(fifo, handle, ENQ);
@@ -214,15 +226,19 @@ void fifo_put(fifo_t * fifo, handle_t * handle, void * data)
   release(fifo, handle);
 }
 
+void fifo_aget(fifo_t * fifo, handle_t * handle)
+{
+  handle->ptr = acquire(fifo, handle, DEQ);
+}
+
 void * fifo_get(fifo_t * fifo, handle_t * handle)
 {
-  void * volatile * ptr = acquire(fifo, handle, DEQ);
-  void * data;
+  fifo_aget(fifo, handle);
 
-  spin_while((data = *ptr) == NULL);
+  void * val;
+  spin_while((val = fifo_test(fifo, handle)) == NULL);
 
-  release(fifo, handle);
-  return data;
+  return val;
 }
 
 void fifo_init(fifo_t * fifo, size_t size, size_t width)

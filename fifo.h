@@ -16,12 +16,13 @@ typedef struct {
 } fifo_t;
 
 typedef struct __attribute__((__packed__, aligned(64))) _fifo_handle_t {
-  struct _fifo_handle_t * next;
+  struct _fifo_node_t * hazard __attribute__((aligned(64)));
   struct _fifo_node_t * node[2];
+  struct _fifo_handle_t * next __attribute__((aligned(64)));
   struct _fifo_node_t * head;
   struct _fifo_node_t * tail;
   unsigned count;
-  struct _fifo_node_t * hazard __attribute__((aligned(64)));
+  void * volatile * ptr;
 } fifo_handle_t;
 
 void fifo_init(fifo_t * fifo, size_t size, size_t width);
@@ -29,5 +30,7 @@ void fifo_register(fifo_t * fifo, fifo_handle_t * handle);
 void fifo_unregister(fifo_t * fifo, fifo_handle_t * handle);
 void * fifo_get(fifo_t * fifo, fifo_handle_t * handle);
 void fifo_put(fifo_t * fifo, fifo_handle_t * handle, void * data);
+void fifo_aget(fifo_t * fifo, fifo_handle_t * handle);
+void * fifo_test(fifo_t * fifo, fifo_handle_t * handle);
 
 #endif /* end of include guard: FIFO_H */
