@@ -24,10 +24,14 @@ typedef struct __attribute__((__packed__, aligned(64))) _fifo_handle_t {
   struct _fifo_node_t * hazard __attribute__((aligned(64)));
 } fifo_handle_t;
 
+typedef void * volatile * fifo_request_t;
+
 void fifo_init(fifo_t * fifo, size_t size, size_t width);
 void fifo_register(fifo_t * fifo, fifo_handle_t * handle);
 void fifo_unregister(fifo_t * fifo, fifo_handle_t * handle);
 void * fifo_get(fifo_t * fifo, fifo_handle_t * handle);
 void fifo_put(fifo_t * fifo, fifo_handle_t * handle, void * data);
+fifo_request_t fifo_aget(fifo_t * fifo, fifo_handle_t * handle);
+void * fifo_test(fifo_t * fifo, fifo_handle_t * handle, fifo_request_t req);
 
 #endif /* end of include guard: FIFO_H */

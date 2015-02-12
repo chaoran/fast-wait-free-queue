@@ -19,6 +19,7 @@ typedef struct _fifo_node_t {
 } node_t;
 
 typedef fifo_handle_t handle_t;
+typedef fifo_request_t request_t;
 
 #define fetch_and_add(p, v) __atomic_fetch_add(p, v, __ATOMIC_RELAXED)
 #define compare_and_swap __sync_val_compare_and_swap
@@ -214,15 +215,26 @@ void fifo_put(fifo_t * fifo, handle_t * handle, void * data)
   release(fifo, handle);
 }
 
+request_t fifo_aget(fifo_t * fifo, handle_t * handle)
+{
+  return acquire(fifo, handle, DEQ);
+}
+
+void * fifo_test(fifo_t * fifo, handle_t * handle, request_t req)
+{
+  void * val = *req;
+  if (val) release(fifo, handle);
+  return val;
+}
+
 void * fifo_get(fifo_t * fifo, handle_t * handle)
 {
-  void * volatile * ptr = acquire(fifo, handle, DEQ);
-  void * data;
+  request_t req = fifo_aget(fifo, handle);
 
-  spin_while((data = *ptr) == NULL);
+  void * val;
+  spin_while((val = fifo_test(fifo, handle, req)) == NULL);
 
-  release(fifo, handle);
-  return data;
+  return val;
 }
 
 void fifo_init(fifo_t * fifo, size_t size, size_t width)
