@@ -147,9 +147,7 @@ node_t * update(node_t * node, size_t to, size_t size)
     node = prev->next;
 
     if (!node) {
-      if (!next) {
-        next = new_node(i + 1, size);
-      }
+      if (!next) next = new_node(i + 1, size);
 
       if (NULL == (node = compare_and_swap(&prev->next, NULL, next))) {
         node = next;
@@ -184,7 +182,7 @@ void * volatile * acquire(fifo_t * fifo, handle_t * handle, int op)
     node_t * prev = node;
     node = update(prev, ni, s);
 
-    handle->node[op]  = node;
+    handle->node[op] = node;
 
     if (prev->id < handle->node[ALT(op)]->id) {
       retire(handle, prev);
