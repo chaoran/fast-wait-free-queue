@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,10 +10,6 @@ typedef union {
 } cache_t;
 
 typedef struct _fifo_node_t {
-  struct {
-    struct _fifo_node_t * next;
-    char volatile flag;
-  } retired __attribute__((aligned(64)));
   struct _fifo_node_t * volatile next __attribute__((aligned(64)));
   size_t id;
   cache_t buffer[0] __attribute__((aligned(64)));
@@ -50,34 +47,10 @@ node_t * new_node(size_t id, size_t size)
 }
 
 static inline
-void retire(handle_t * rlist, node_t * node)
+node_t * cleanup(handle_t * plist, handle_t * rlist, node_t * from, node_t * to)
 {
-  /** Only retire each node once. */
-  if (node->retired.flag || test_and_set(&node->retired.flag)) {
-    return;
-  }
-
-  if (rlist->tail == NULL) {
-    rlist->head = node;
-    rlist->tail = node;
-  } else {
-    rlist->tail->retired.next = node;
-    rlist->tail = node;
-  }
-
-  rlist->count += 1;
-  return;
-}
-
-static inline
-void cleanup(handle_t * plist, handle_t * rlist)
-{
-  /** Find the hazard node. */
-  node_t * mine = rlist->node[ENQ]->id < rlist->node[DEQ]->id ?
-    rlist->node[ENQ] : rlist->node[DEQ];
-
-  size_t bar = mine->id;
-  size_t min = rlist->head->id;
+  size_t bar = to->id;
+  size_t min = from->id;
 
   /** Scan plist to find the lowest bar. */
   handle_t * p;
@@ -88,7 +61,7 @@ void cleanup(handle_t * plist, handle_t * rlist)
       node_t * node = p->node[i];
 
       if (node->id < bar && p->hazard == NULL) {
-        node_t * prev = compare_and_swap(&p->node[i], node, mine);
+        node_t * prev = compare_and_swap(&p->node[i], node, to);
         release_fence();
         node_t * curr = load(&p->hazard);
 
@@ -96,7 +69,7 @@ void cleanup(handle_t * plist, handle_t * rlist)
           node = curr;
         } else {
           if (prev == node) {
-            node = mine;
+            node = to;
           } else {
             node = prev;
           }
@@ -105,34 +78,20 @@ void cleanup(handle_t * plist, handle_t * rlist)
 
       if (node->id < bar) {
         bar = node->id;
-        if (bar <= min) return;
+        to = node;
+
+        if (bar <= min) return to;
       }
     }
   }
 
-  /** Scan rlist to free nodes that is lower than the bar. */
-  int count = rlist->count;
-  node_t * curr = rlist->head;
-  node_t * next = NULL;
-
-  do {
-    if (curr->id < bar) {
-      count--;
-      next = curr->retired.next;
-      free(curr);
-      curr = next;
-    } else {
-      next = curr;
-      curr = NULL;
-    }
-  } while (curr);
-
-  rlist->count = count;
-  rlist->head  = next;
-
-  if (rlist->head == NULL) {
-    rlist->tail = NULL;
+  while (from != to) {
+    node_t * next = from->next;
+    free(from);
+    from = next;
   }
+
+  return to;
 }
 
 static inline
@@ -179,14 +138,16 @@ void * volatile * acquire(fifo_t * fifo, handle_t * handle, int op)
   size_t li = i % s;
 
   if (node->id != ni) {
-    node_t * prev = node;
-    node = update(prev, ni, s);
+    node = update(node, ni, s);
 
+    /**
+     * @note
+     * This is a harmless data race. Even if we overwrite the local
+     * pointer set by a CAS, we are still safe. Because the other thread
+     * will see the hazard pointer and avoid touching any node that is
+     * newer than the hazard node.
+     */
     handle->node[op] = node;
-
-    if (prev->id < handle->node[ALT(op)]->id) {
-      retire(handle, prev);
-    }
   }
 
   return &node->buffer[li].data;
@@ -197,9 +158,19 @@ void release(fifo_t * fifo, handle_t * handle)
 {
   const int threshold = 1 * fifo->W;
 
+  node_t * node = handle->node[0]->id < handle->node[1]->id ?
+    handle->node[0] : handle->node[1];
+
   /** Do nothing if we haven't reach threshold. */
-  if (handle->count >= threshold) {
-    cleanup(fifo->plist, handle);
+  if (node->id - fifo->head.index > threshold) {
+    node_t * head = fifo->head.node;
+
+    if (head && head == compare_and_swap(&fifo->head.node, head, NULL)) {
+      head = cleanup(fifo->plist, handle, head, node);
+
+      fifo->head.node = head;
+      store(&fifo->head.index, head->id);
+    }
   }
 
   store(&handle->hazard, NULL);
@@ -245,23 +216,18 @@ void fifo_init(fifo_t * fifo, size_t size, size_t width)
   fifo->S = size;
   fifo->W = width;
 
-  node_t * node = new_node(0, size);
-
+  fifo->head.index = 0;
+  fifo->head.node = new_node(0, size);
   fifo->tail[ENQ].index = 0;
-  fifo->tail[ENQ].node  = node;
   fifo->tail[DEQ].index = 0;
-  fifo->tail[DEQ].node  = node;
 
   fifo->plist = NULL;
 }
 
 void fifo_register(fifo_t * fifo, handle_t * me)
 {
-  me->node[ENQ]  = fifo->tail[ENQ].node;
-  me->node[DEQ]  = fifo->tail[DEQ].node;
-  me->head = NULL;
-  me->tail = NULL;
-  me->count  = 0;
+  me->node[ENQ]  = fifo->head.node;
+  me->node[DEQ]  = fifo->head.node;
   me->hazard = NULL;
 
   handle_t * curr = fifo->plist;
@@ -272,14 +238,8 @@ void fifo_register(fifo_t * fifo, handle_t * me)
   } while (me->next != curr);
 }
 
-
 void fifo_unregister(fifo_t * fifo, handle_t * me)
 {
-  /** Clean my retired nodes. */
-  while (me->head) {
-    cleanup(fifo->plist, me);
-  }
-
   /** Remove myself from plist. */
   lock(&fifo->lock);
 
@@ -292,11 +252,6 @@ void fifo_unregister(fifo_t * fifo, handle_t * me)
   } else {
     while (p->next != me) p = p->next;
     p->next = me->next;
-  }
-
-  if (fifo->plist == NULL) {
-    fifo->tail[ENQ].node = me->node[ENQ];
-    fifo->tail[DEQ].node = me->node[DEQ];
   }
 
   unlock(&fifo->lock);
