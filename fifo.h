@@ -25,6 +25,8 @@ typedef struct __attribute__((__packed__, aligned(64))) _fifo_handle_t {
   void * volatile * ptr;
 } fifo_handle_t;
 
+typedef void * volatile * fifo_request_t;
+
 void fifo_init(fifo_t * fifo, size_t size, size_t width);
 void fifo_register(fifo_t * fifo, fifo_handle_t * handle);
 void fifo_unregister(fifo_t * fifo, fifo_handle_t * handle);
