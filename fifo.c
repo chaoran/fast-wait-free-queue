@@ -86,11 +86,11 @@ node_t * cleanup(handle_t * plist, handle_t * rlist, node_t * from, node_t * to)
     p->head = bar;
   }
 
-  while (from != to) {
-    node_t * next = from->next;
-    free(from);
-    from = next;
-  }
+  /*while (from != to) {*/
+    /*node_t * next = from->next;*/
+    /*free(from);*/
+    /*from = next;*/
+  /*}*/
 
   return to;
 }
@@ -162,7 +162,7 @@ void * volatile * acquire(fifo_t * fifo, handle_t * handle, int op)
 static inline
 void release(fifo_t * fifo, handle_t * handle)
 {
-  const int threshold = 18 * fifo->W;
+  const int threshold = 10 * fifo->W;
 
   if (handle->advanced) {
     node_t * node = handle->node[0]->id < handle->node[1]->id ?
@@ -171,13 +171,24 @@ void release(fifo_t * fifo, handle_t * handle)
     /* Do nothing if we haven't reach threshold. */
     size_t index = handle->head;
 
-    if (node->id - index > threshold) {
-      if (index == compare_and_swap(&fifo->head.index, index, -1)) {
-        node_t * head = fifo->head.node;
-        head = cleanup(fifo->plist, handle, head, node);
+    if (index != -1 && node->id - index > threshold) {
+      if (index == fifo->head.index) {
+        handle->head = compare_and_swap(&fifo->head.index, index, -1);
 
-        fifo->head.node = head;
-        store(&fifo->head.index, head->id);
+        if (index == handle->head) {
+          node_t * head = fifo->head.node;
+          node = cleanup(fifo->plist, handle, head, node);
+
+          fifo->head.node = node;
+          store(&fifo->head.index, node->id);
+
+          /** Free. */
+          while (head != node) {
+            node_t * next = head->next;
+            free(head);
+            head = next;
+          }
+        }
       }
     }
 
