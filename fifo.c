@@ -56,7 +56,7 @@ node_t * cleanup(handle_t * plist, handle_t * rlist, node_t * from, node_t * to)
   /** Scan plist to find the lowest bar. */
   handle_t * p;
 
-  for (p = plist; p != NULL; p = p->next) {
+  for (p = plist; p != NULL && from != to; p = p->next) {
     int i;
     for (i = 0; i < 2; ++i) {
       node_t * node = p->node[i];
@@ -80,10 +80,10 @@ node_t * cleanup(handle_t * plist, handle_t * rlist, node_t * from, node_t * to)
       if (node->id < bar) {
         bar = node->id;
         to = node;
-
-        if (bar <= min) return to;
       }
     }
+
+    p->head = bar;
   }
 
   while (from != to) {
@@ -139,6 +139,7 @@ void * volatile * acquire(fifo_t * fifo, handle_t * handle, int op)
   size_t li = i % s;
 
   if (node->id != ni) {
+    node_t * prev = node;
     node = update(node, ni, s);
 
     /**
@@ -149,6 +150,10 @@ void * volatile * acquire(fifo_t * fifo, handle_t * handle, int op)
      * newer than the hazard node.
      */
     handle->node[op] = node;
+
+    if (prev->id < handle->node[ALT(op)]->id) {
+      handle->advanced = 1;
+    }
   }
 
   return &node->buffer[li].data;
@@ -157,21 +162,26 @@ void * volatile * acquire(fifo_t * fifo, handle_t * handle, int op)
 static inline
 void release(fifo_t * fifo, handle_t * handle)
 {
-  const int threshold = 1 * fifo->W;
+  const int threshold = 18 * fifo->W;
 
-  node_t * node = handle->node[0]->id < handle->node[1]->id ?
-    handle->node[0] : handle->node[1];
+  if (handle->advanced) {
+    node_t * node = handle->node[0]->id < handle->node[1]->id ?
+      handle->node[0] : handle->node[1];
 
-  /** Do nothing if we haven't reach threshold. */
-  if (node->id - fifo->head.index > threshold) {
-    node_t * head = fifo->head.node;
+    /* Do nothing if we haven't reach threshold. */
+    size_t index = handle->head;
 
-    if (head && head == compare_and_swap(&fifo->head.node, head, NULL)) {
-      head = cleanup(fifo->plist, handle, head, node);
+    if (node->id - index > threshold) {
+      if (index == compare_and_swap(&fifo->head.index, index, -1)) {
+        node_t * head = fifo->head.node;
+        head = cleanup(fifo->plist, handle, head, node);
 
-      fifo->head.node = head;
-      store(&fifo->head.index, head->id);
+        fifo->head.node = head;
+        store(&fifo->head.index, head->id);
+      }
     }
+
+    handle->advanced = 0;
   }
 
   store(&handle->hazard, NULL);
@@ -230,6 +240,8 @@ void fifo_register(fifo_t * fifo, handle_t * me)
   me->node[ENQ]  = fifo->head.node;
   me->node[DEQ]  = fifo->head.node;
   me->hazard = NULL;
+  me->head = 0;
+  me->advanced = 0;
 
   handle_t * curr = fifo->plist;
 
