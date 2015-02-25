@@ -7,11 +7,8 @@ typedef struct {
   char lock;
   size_t S;
   size_t W;
-  struct {
-    size_t index;
-    struct _fifo_node_t * node;
-  } head __attribute__((aligned(64)));
   struct _fifo_handle_t * plist;
+  struct _fifo_node_t * head;
   struct {
     size_t index;
     char padding[64 - 2 * sizeof(void *)];
@@ -20,8 +17,7 @@ typedef struct {
 
 typedef struct __attribute__((__packed__, aligned(64))) _fifo_handle_t {
   struct _fifo_node_t * hazard __attribute__((aligned(64)));
-  struct _fifo_node_t * node[2];
-  size_t head;
+  struct _fifo_node_t * node[3];
   struct _fifo_handle_t * next __attribute__((aligned(64)));
   void * volatile * ptr;
   int advanced;

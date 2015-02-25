@@ -47,8 +47,8 @@ node_t * new_node(size_t id, size_t size)
   return node;
 }
 
-static inline
-node_t * cleanup(handle_t * plist, handle_t * rlist, node_t * from, node_t * to)
+static __attribute__((noinline))
+node_t * cleanup(handle_t * plist, node_t * from, node_t * to)
 {
   size_t bar = to->id;
   size_t min = from->id;
@@ -56,9 +56,9 @@ node_t * cleanup(handle_t * plist, handle_t * rlist, node_t * from, node_t * to)
   /** Scan plist to find the lowest bar. */
   handle_t * p;
 
-  for (p = plist; p != NULL && from != to; p = p->next) {
+  for (p = plist; p != NULL; p = p->next) {
     int i;
-    for (i = 0; i < 2; ++i) {
+    for (i = 0; i < 3; ++i) {
       node_t * node = p->node[i];
 
       if (node->id < bar && p->hazard == NULL) {
@@ -80,22 +80,16 @@ node_t * cleanup(handle_t * plist, handle_t * rlist, node_t * from, node_t * to)
       if (node->id < bar) {
         bar = node->id;
         to = node;
+
+        if (bar <= min) return to;
       }
     }
-
-    p->head = bar;
   }
-
-  /*while (from != to) {*/
-    /*node_t * next = from->next;*/
-    /*free(from);*/
-    /*from = next;*/
-  /*}*/
 
   return to;
 }
 
-static inline
+static __attribute__((noinline))
 node_t * update(node_t * node, size_t to, size_t size)
 {
   size_t i;
@@ -120,7 +114,7 @@ node_t * update(node_t * node, size_t to, size_t size)
   return node;
 }
 
-static inline
+static __attribute__((noinline))
 void * volatile * acquire(fifo_t * fifo, handle_t * handle, int op)
 {
   node_t * node;
@@ -159,35 +153,29 @@ void * volatile * acquire(fifo_t * fifo, handle_t * handle, int op)
   return &node->buffer[li].data;
 }
 
-static inline
+static __attribute__((noinline))
 void release(fifo_t * fifo, handle_t * handle)
 {
-  const int threshold = 10 * fifo->W;
+  const int threshold = 2 * fifo->W;
 
   if (handle->advanced) {
     node_t * node = handle->node[0]->id < handle->node[1]->id ?
       handle->node[0] : handle->node[1];
 
-    /* Do nothing if we haven't reach threshold. */
-    size_t index = handle->head;
+    node_t * head = handle->node[2];
+    store(&handle->hazard, head);
+    fence();
 
-    if (index != -1 && node->id - index > threshold) {
-      if (index == fifo->head.index) {
-        handle->head = compare_and_swap(&fifo->head.index, index, -1);
+    if (head == load(&handle->node[2])) {
+      /* Do nothing if we haven't reach threshold. */
+      if (node->id - head->id > threshold) {
+        node = cleanup(fifo->plist, head, node);
 
-        if (index == handle->head) {
-          node_t * head = fifo->head.node;
-          node = cleanup(fifo->plist, handle, head, node);
-
-          fifo->head.node = node;
-          store(&fifo->head.index, node->id);
-
-          /** Free. */
-          while (head != node) {
-            node_t * next = head->next;
-            free(head);
-            head = next;
-          }
+        /** Free. */
+        while (head != node) {
+          node_t * next = head->next;
+          free(head);
+          head = next;
         }
       }
     }
@@ -238,8 +226,7 @@ void fifo_init(fifo_t * fifo, size_t size, size_t width)
   fifo->S = size;
   fifo->W = width;
 
-  fifo->head.index = 0;
-  fifo->head.node = new_node(0, size);
+  fifo->head = new_node(0, size);
   fifo->tail[ENQ].index = 0;
   fifo->tail[DEQ].index = 0;
 
@@ -248,10 +235,10 @@ void fifo_init(fifo_t * fifo, size_t size, size_t width)
 
 void fifo_register(fifo_t * fifo, handle_t * me)
 {
-  me->node[ENQ]  = fifo->head.node;
-  me->node[DEQ]  = fifo->head.node;
+  me->node[ENQ]  = fifo->head;
+  me->node[DEQ]  = fifo->head;
+  me->node[2]    = fifo->head;
   me->hazard = NULL;
-  me->head = 0;
   me->advanced = 0;
 
   handle_t * curr = fifo->plist;
