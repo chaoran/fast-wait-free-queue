@@ -16,7 +16,6 @@ typedef struct _fifo_node_t {
 } node_t;
 
 typedef fifo_handle_t handle_t;
-typedef fifo_request_t request_t;
 
 #define fetch_and_add(p, v) __atomic_fetch_add(p, v, __ATOMIC_RELAXED)
 #define compare_and_swap __sync_val_compare_and_swap
@@ -162,7 +161,7 @@ void * volatile * acquire(fifo_t * fifo, handle_t * handle, int op)
 static inline
 void release(fifo_t * fifo, handle_t * handle)
 {
-  const int threshold = 18 * fifo->W;
+  const int threshold = 2 * fifo->W;
 
   if (handle->advanced) {
     node_t * node = handle->node[0]->id < handle->node[1]->id ?
