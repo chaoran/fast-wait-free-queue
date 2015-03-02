@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/time.h>
 #include <pthread.h>
 
 static size_t n = 10000000;
@@ -42,9 +43,9 @@ static inline void delay(size_t cycles)
 
 size_t static inline time_elapsed(size_t val)
 {
-  struct timespec t;
-  clock_gettime(CLOCK_MONOTONIC, &t);
-  return t.tv_sec * 1000000000 + t.tv_nsec - val;
+  struct timeval t;
+  gettimeofday(&t, NULL);
+  return t.tv_sec * 1000000000 + t.tv_usec * 1000 - val;
 }
 
 static inline rand_state_t rand_seed(size_t seed)
