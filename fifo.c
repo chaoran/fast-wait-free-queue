@@ -26,7 +26,7 @@ typedef fifo_handle_t handle_t;
 #define store(p, v) __atomic_store_n(p, v, __ATOMIC_RELEASE)
 #define load(p) __atomic_load_n(p, __ATOMIC_ACQUIRE)
 #define spin_while(cond) while (cond) __asm__ ("pause")
-#define fence() __asm__ ( "mfence" : : : "memory" );
+#define fence() __atomic_thread_fence(__ATOMIC_SEQ_CST)
 #define release_fence() __atomic_thread_fence(__ATOMIC_RELEASE)
 #define lock(p) spin_while(__atomic_test_and_set(p, __ATOMIC_ACQUIRE))
 #define unlock(p) __atomic_clear(p, __ATOMIC_RELEASE)
