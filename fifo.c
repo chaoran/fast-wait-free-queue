@@ -1,18 +1,17 @@
 #include <stdio.h>
-#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 #include "fifo.h"
 
 typedef union {
   void * volatile data;
-  char padding[64];
+  char padding[FIFO_CACHELINE_SIZE];
 } cache_t;
 
 typedef struct _fifo_node_t {
-  struct _fifo_node_t * volatile next __attribute__((aligned(64)));
+  struct _fifo_node_t * volatile next FIFO_CACHELINE_ALIGNED;
   size_t id;
-  cache_t buffer[0] __attribute__((aligned(64)));
+  cache_t buffer[0] FIFO_CACHELINE_ALIGNED;
 } node_t;
 
 typedef fifo_handle_t handle_t;
