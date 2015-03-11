@@ -18,12 +18,9 @@ typedef fifo_handle_t handle_t;
 
 #define fetch_and_add(p, v) __atomic_fetch_add(p, v, __ATOMIC_RELAXED)
 #define compare_and_swap __sync_val_compare_and_swap
-#define test_and_set(p) __atomic_test_and_set(p, __ATOMIC_RELAXED)
-#define store(p, v) __atomic_store_n(p, v, __ATOMIC_RELEASE)
-#define load(p) __atomic_load_n(p, __ATOMIC_ACQUIRE)
 #define spin_while(cond) while (cond) __asm__ ("pause")
-#define fence() __atomic_thread_fence(__ATOMIC_SEQ_CST)
-#define release_fence() __atomic_thread_fence(__ATOMIC_RELEASE)
+#define mfence() __atomic_thread_fence(__ATOMIC_SEQ_CST)
+#define cfence() __atomic_thread_fence(__ATOMIC_ACQ_REL)
 #define lock(p) spin_while(__atomic_test_and_set(p, __ATOMIC_ACQUIRE))
 #define unlock(p) __atomic_clear(p, __ATOMIC_RELEASE)
 
@@ -61,8 +58,8 @@ node_t * cleanup(handle_t * plist, handle_t * rlist, node_t * from, node_t * to)
 
       if (node->id < bar && p->hazard == NULL) {
         node_t * prev = compare_and_swap(&p->node[i], node, to);
-        release_fence();
-        node_t * curr = load(&p->hazard);
+        cfence();
+        node_t * curr = p->hazard;
 
         if (curr) {
           node = curr;
@@ -97,24 +94,20 @@ static inline
 node_t * update(node_t * node, size_t to, size_t size)
 {
   size_t i;
-  node_t * prev;
-  node_t * next = NULL;
 
   for (i = node->id; i < to; ++i) {
-    prev = node;
+    node_t * prev = node;
     node = prev->next;
 
     if (!node) {
-      if (!next) next = new_node(i + 1, size);
+      node_t * next = new_node(i + 1, size);
+      node = compare_and_swap(&prev->next, NULL, next);
 
-      if (NULL == (node = compare_and_swap(&prev->next, NULL, next))) {
-        node = next;
-        next = NULL;
-      }
+      if (node) free(next);
+      else node = next;
     }
   }
 
-  if (next) free(next);
   return node;
 }
 
@@ -126,9 +119,9 @@ void * volatile * acquire(fifo_t * fifo, handle_t * handle, int op)
 
   do {
     node = curr;
-    store(&handle->hazard, node);
-    fence();
-    curr = load(&handle->node[op]);
+    handle->hazard = node;
+    mfence();
+    curr = handle->node[op];
   } while (node != curr);
 
   size_t s  = fifo->S;
@@ -175,14 +168,14 @@ void release(fifo_t * fifo, handle_t * handle)
         head = cleanup(fifo->plist, handle, head, node);
 
         fifo->head.node = head;
-        store(&fifo->head.index, head->id);
+        fifo->head.index = head->id;
       }
     }
 
     handle->advanced = 0;
   }
 
-  store(&handle->hazard, NULL);
+  handle->hazard = NULL;
 }
 
 void * fifo_test(fifo_t * fifo, handle_t * handle)
