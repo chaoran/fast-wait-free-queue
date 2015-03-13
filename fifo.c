@@ -163,7 +163,8 @@ void release(fifo_t * fifo, handle_t * handle)
     size_t index = handle->head;
 
     if (node->id - index > threshold) {
-      if (index == compare_and_swap(&fifo->head.index, index, -1)) {
+      if (index == fifo->head.index &&
+          index == compare_and_swap(&fifo->head.index, index, -1)) {
         node_t * head = fifo->head.node;
         head = cleanup(fifo->plist, handle, head, node);
 
