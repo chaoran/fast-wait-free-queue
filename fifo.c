@@ -25,10 +25,6 @@ typedef fifo_handle_t handle_t;
 #define lock(p) spin_while(__atomic_test_and_set(p, __ATOMIC_ACQUIRE))
 #define unlock(p) __atomic_clear(p, __ATOMIC_RELEASE)
 
-#define ENQ (0)
-#define DEQ (1)
-#define ALT(i) (1 - i)
-
 static inline
 node_t * new_node(size_t id, size_t size)
 {
@@ -73,7 +69,7 @@ static inline
 void cleanup(fifo_t * fifo, node_t * head)
 {
   size_t  index = fifo->head.index;
-  int threshold = 2 * fifo->W;
+  int threshold = 2 * fifo->nprocs;
 
   if (index != -1 && head->id - index > threshold &&
       index == compare_and_swap(&fifo->head.index, index, -1)) {
@@ -82,8 +78,8 @@ void cleanup(fifo_t * fifo, node_t * head)
 
     for (p = fifo->plist; p != NULL && curr != head; p = p->next) {
       head = check(&p->hazard, NULL, head);
-      head = check(&p->node[0], &p->hazard, head);
-      head = check(&p->node[1], &p->hazard, head);
+      head = check(&p->enq, &p->hazard, head);
+      head = check(&p->deq, &p->hazard, head);
     }
 
     while (curr != head) {
@@ -139,14 +135,15 @@ node_t * acquire(node_t * volatile * pnode, node_t * volatile * phazard)
 
 void fifo_put(fifo_t * fifo, handle_t * handle, void * data)
 {
-  node_t * node = acquire(&handle->node[ENQ], &handle->hazard);
+  node_t * node = acquire(&handle->enq, &handle->hazard);
 
-  size_t i  = fetch_and_add(&fifo->tail[ENQ].index, 1);
-  size_t ni = i / fifo->S;
-  size_t li = i % fifo->S;
+  size_t i  = fetch_and_add(&fifo->enq, 1);
+  size_t s  = fifo->size;
+  size_t ni = i / s;
+  size_t li = i % s;
 
   if (node->id != ni) {
-    node = handle->node[ENQ] = update(node, ni, fifo->S, &handle->winner);
+    node = handle->enq = update(node, ni, s, &handle->winner);
   }
 
   node->buffer[li].data = data;
@@ -155,14 +152,15 @@ void fifo_put(fifo_t * fifo, handle_t * handle, void * data)
 
 void * fifo_get(fifo_t * fifo, handle_t * handle)
 {
-  node_t * node = acquire(&handle->node[DEQ], &handle->hazard);
+  node_t * node = acquire(&handle->deq, &handle->hazard);
 
-  size_t i  = fetch_and_add(&fifo->tail[DEQ].index, 1);
-  size_t ni = i / fifo->S;
-  size_t li = i % fifo->S;
+  size_t i  = fetch_and_add(&fifo->deq, 1);
+  size_t s  = fifo->size;
+  size_t ni = i / s;
+  size_t li = i % s;
 
   if (node->id != ni) {
-    node = handle->node[DEQ] = update(node, ni, fifo->S, &handle->winner);
+    node = handle->deq = update(node, ni, s, &handle->winner);
   }
 
   void * val;
@@ -180,21 +178,21 @@ void * fifo_get(fifo_t * fifo, handle_t * handle)
 void fifo_init(fifo_t * fifo, size_t size, size_t width)
 {
   fifo->lock = 0;
-  fifo->S = size;
-  fifo->W = width;
+  fifo->size = size;
+  fifo->nprocs = width;
 
   fifo->head.index = 0;
   fifo->head.node = new_node(0, size);
-  fifo->tail[ENQ].index = 0;
-  fifo->tail[DEQ].index = 0;
+  fifo->enq = 0;
+  fifo->deq = 0;
 
   fifo->plist = NULL;
 }
 
 void fifo_register(fifo_t * fifo, handle_t * me)
 {
-  me->node[ENQ]  = fifo->head.node;
-  me->node[DEQ]  = fifo->head.node;
+  me->enq = fifo->head.node;
+  me->deq = fifo->head.node;
   me->hazard = NULL;
   me->winner = 0;
 
@@ -211,7 +209,7 @@ void fifo_unregister(fifo_t * fifo, handle_t * me)
   /** Remove myself from plist. */
   lock(&fifo->lock);
 
-  fifo->W -= 1;
+  fifo->nprocs -= 1;
 
   handle_t * p = fifo->plist;
 
@@ -234,7 +232,7 @@ static fifo_t fifo;
 
 void init(int nprocs)
 {
-  fifo_init(&fifo, 510, nprocs);
+  fifo_init(&fifo, 511, nprocs);
 }
 
 void thread_init(int id, void * handle)

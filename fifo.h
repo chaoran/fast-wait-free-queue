@@ -11,23 +11,22 @@
 struct _fifo_node_t;
 
 typedef struct FIFO_DOUBLE_CACHELINE_ALIGNED {
-  struct {
-    size_t index;
-    char padding[FIFO_DOUBLE_CACHELINE_SIZE- sizeof(size_t)];
-  } tail[2] FIFO_DOUBLE_CACHELINE_ALIGNED;
+  size_t enq FIFO_DOUBLE_CACHELINE_ALIGNED;
+  size_t deq FIFO_DOUBLE_CACHELINE_ALIGNED;
   struct {
     volatile size_t index;
     struct _fifo_node_t * node;
   } head FIFO_DOUBLE_CACHELINE_ALIGNED;
   char lock;
-  size_t S;
-  size_t W;
+  size_t size;
+  size_t nprocs;
   struct _fifo_handle_t * plist;
 } fifo_t;
 
 typedef struct FIFO_DOUBLE_CACHELINE_ALIGNED _fifo_handle_t {
   struct _fifo_node_t * hazard;
-  struct _fifo_node_t * node[2];
+  struct _fifo_node_t * enq;
+  struct _fifo_node_t * deq;
   struct _fifo_handle_t * next;
   int winner;
 } fifo_handle_t;
