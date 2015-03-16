@@ -77,8 +77,6 @@ node_t * cleanup(handle_t * plist, handle_t * rlist, node_t * from, node_t * to)
         to = node;
       }
     }
-
-    p->head = bar;
   }
 
   while (from != to) {
@@ -160,16 +158,15 @@ void release(fifo_t * fifo, handle_t * handle)
       handle->node[0] : handle->node[1];
 
     /* Do nothing if we haven't reach threshold. */
-    size_t index = handle->head;
+    size_t index = fifo->head.index;
 
-    if (node->id - index > threshold) {
-      if (index == fifo->head.index &&
-          index == compare_and_swap(&fifo->head.index, index, -1)) {
+    if (index != -1 && node->id - index > threshold) {
+      if (index == compare_and_swap(&fifo->head.index, index, -1)) {
         node_t * head = fifo->head.node;
         head = cleanup(fifo->plist, handle, head, node);
 
         fifo->head.node = head;
-        fifo->head.index = head->id;
+        __atomic_store_n(&fifo->head.index, head->id, __ATOMIC_RELEASE);
       }
     }
 
@@ -179,18 +176,6 @@ void release(fifo_t * fifo, handle_t * handle)
   handle->hazard = NULL;
 }
 
-void * fifo_test(fifo_t * fifo, handle_t * handle)
-{
-  void * val = *handle->ptr;
-
-  if (val) {
-    release(fifo, handle);
-    handle->ptr = NULL;
-  }
-
-  return val;
-}
-
 void fifo_put(fifo_t * fifo, handle_t * handle, void * data)
 {
   void * volatile * ptr = acquire(fifo, handle, ENQ);
@@ -198,18 +183,14 @@ void fifo_put(fifo_t * fifo, handle_t * handle, void * data)
   release(fifo, handle);
 }
 
-void fifo_aget(fifo_t * fifo, handle_t * handle)
-{
-  handle->ptr = acquire(fifo, handle, DEQ);
-}
-
 void * fifo_get(fifo_t * fifo, handle_t * handle)
 {
-  fifo_aget(fifo, handle);
+  void * volatile * ptr = acquire(fifo, handle, DEQ);
 
   void * val;
-  spin_while((val = fifo_test(fifo, handle)) == NULL);
+  spin_while(NULL == (val = *ptr));
 
+  release(fifo, handle);
   return val;
 }
 
@@ -232,7 +213,6 @@ void fifo_register(fifo_t * fifo, handle_t * me)
   me->node[ENQ]  = fifo->head.node;
   me->node[DEQ]  = fifo->head.node;
   me->hazard = NULL;
-  me->head = 0;
   me->advanced = 0;
 
   handle_t * curr = fifo->plist;
