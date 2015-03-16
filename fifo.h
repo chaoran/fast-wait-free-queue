@@ -29,7 +29,7 @@ typedef struct FIFO_DOUBLE_CACHELINE_ALIGNED _fifo_handle_t {
   struct _fifo_node_t * hazard;
   struct _fifo_node_t * node[2];
   struct _fifo_handle_t * next;
-  int advanced;
+  int winner;
 } fifo_handle_t;
 
 void fifo_init(fifo_t * fifo, size_t size, size_t width);
