@@ -26,10 +26,9 @@ typedef struct FIFO_DOUBLE_CACHELINE_ALIGNED {
 } fifo_t;
 
 typedef struct FIFO_DOUBLE_CACHELINE_ALIGNED _fifo_handle_t {
-  struct _fifo_node_t * volatile hazard;
-  struct _fifo_node_t * volatile node[2];
+  struct _fifo_node_t * hazard;
+  struct _fifo_node_t * node[2];
   struct _fifo_handle_t * next;
-  void * volatile * ptr;
   int advanced;
 } fifo_handle_t;
 

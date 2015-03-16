@@ -43,40 +43,40 @@ node_t * new_node(size_t id, size_t size)
 }
 
 static inline
-node_t * cleanup(handle_t * plist, handle_t * rlist, node_t * from, node_t * to)
+node_t * check(node_t ** pnode, node_t * volatile * phazard,
+    node_t * to)
 {
-  size_t bar = to->id;
-  size_t min = from->id;
+  node_t * node = *pnode;
 
-  /** Scan plist to find the lowest bar. */
-  handle_t * p;
+  if (phazard) {
+    if (node->id < to->id) {
+      node_t * curr = compare_and_swap(pnode, node, to);
+      cfence();
+      node_t * hazard = *phazard;
+      node = hazard ? hazard : (curr == node ? to : curr);
 
-  for (p = plist; p != NULL && from != to; p = p->next) {
-    int i;
-    for (i = 0; i < 2; ++i) {
-      node_t * node = p->node[i];
-
-      if (node->id < bar && p->hazard == NULL) {
-        node_t * prev = compare_and_swap(&p->node[i], node, to);
-        cfence();
-        node_t * curr = p->hazard;
-
-        if (curr) {
-          node = curr;
-        } else {
-          if (prev == node) {
-            node = to;
-          } else {
-            node = prev;
-          }
-        }
-      }
-
-      if (node->id < bar) {
-        bar = node->id;
+      if (node->id < to->id) {
         to = node;
       }
     }
+  } else {
+    if (node && node->id < to->id) {
+      to = node;
+    }
+  }
+
+  return to;
+}
+
+static inline
+node_t * cleanup(handle_t * plist, handle_t * rlist, node_t * from, node_t * to)
+{
+  handle_t * p;
+
+  for (p = plist; p != NULL && from != to; p = p->next) {
+    to = check(&p->hazard, NULL, to);
+    to = check(&p->node[0], &p->hazard, to);
+    to = check(&p->node[1], &p->hazard, to);
   }
 
   while (from != to) {
@@ -89,7 +89,7 @@ node_t * cleanup(handle_t * plist, handle_t * rlist, node_t * from, node_t * to)
 }
 
 static inline
-node_t * update(node_t * node, size_t to, size_t size)
+node_t * update(node_t * node, size_t to, size_t size, int * winner)
 {
   size_t i;
 
@@ -102,7 +102,10 @@ node_t * update(node_t * node, size_t to, size_t size)
       node = compare_and_swap(&prev->next, NULL, next);
 
       if (node) free(next);
-      else node = next;
+      else {
+        node = next;
+        *winner = 1;
+      }
     }
   }
 
@@ -110,7 +113,8 @@ node_t * update(node_t * node, size_t to, size_t size)
 }
 
 static inline
-void * volatile * acquire(fifo_t * fifo, handle_t * handle, int op)
+void * volatile * acquire(fifo_t * fifo, handle_t * handle, int op,
+    int * winner)
 {
   node_t * node;
   node_t * curr = handle->node[op];
@@ -128,32 +132,19 @@ void * volatile * acquire(fifo_t * fifo, handle_t * handle, int op)
   size_t li = i % s;
 
   if (node->id != ni) {
-    node_t * prev = node;
-    node = update(node, ni, s);
-
-    /**
-     * @note
-     * This is a harmless data race. Even if we overwrite the local
-     * pointer set by a CAS, we are still safe. Because the other thread
-     * will see the hazard pointer and avoid touching any node that is
-     * newer than the hazard node.
-     */
-    handle->node[op] = node;
-
-    if (prev->id < handle->node[ALT(op)]->id) {
-      handle->advanced = 1;
-    }
+    handle->node[op] = node = update(node, ni, s, winner);
   }
 
   return &node->buffer[li].data;
 }
 
 static inline
-void release(fifo_t * fifo, handle_t * handle)
+void release(fifo_t * fifo, handle_t * handle, int winner)
 {
   const int threshold = 2 * fifo->W;
+  handle->hazard = NULL;
 
-  if (handle->advanced) {
+  if (winner) {
     node_t * node = handle->node[0]->id < handle->node[1]->id ?
       handle->node[0] : handle->node[1];
 
@@ -169,28 +160,26 @@ void release(fifo_t * fifo, handle_t * handle)
         __atomic_store_n(&fifo->head.index, head->id, __ATOMIC_RELEASE);
       }
     }
-
-    handle->advanced = 0;
   }
-
-  handle->hazard = NULL;
 }
 
 void fifo_put(fifo_t * fifo, handle_t * handle, void * data)
 {
-  void * volatile * ptr = acquire(fifo, handle, ENQ);
+  int winner = 0;
+  void * volatile * ptr = acquire(fifo, handle, ENQ, &winner);
   *ptr = data;
-  release(fifo, handle);
+  release(fifo, handle, winner);
 }
 
 void * fifo_get(fifo_t * fifo, handle_t * handle)
 {
-  void * volatile * ptr = acquire(fifo, handle, DEQ);
+  int winner = 0;
+  void * volatile * ptr = acquire(fifo, handle, DEQ, &winner);
 
   void * val;
   spin_while(NULL == (val = *ptr));
 
-  release(fifo, handle);
+  release(fifo, handle, winner);
   return val;
 }
 
