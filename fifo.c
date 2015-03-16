@@ -237,6 +237,16 @@ void init(int nprocs)
 
 void thread_init(int id, void * handle)
 {
+  int i;
+  void * mem[100];
+
+  for (i = 0; i < 100; ++i) {
+    mem[i] = new_node(0, 511);
+  }
+  for (i = 0; i < 100; ++i) {
+    free(mem[i]);
+  }
+
   fifo_register(&fifo, handle);
 }
 
