@@ -10,7 +10,7 @@ typedef union {
 
 typedef struct _fifo_node_t {
   struct _fifo_node_t * volatile next FIFO_CACHELINE_ALIGNED;
-  size_t id;
+  size_t id FIFO_CACHELINE_ALIGNED;
   cache_t buffer[0] FIFO_CACHELINE_ALIGNED;
 } node_t;
 
@@ -232,7 +232,7 @@ static fifo_t fifo;
 
 void init(int nprocs)
 {
-  fifo_init(&fifo, 511, nprocs);
+  fifo_init(&fifo, 510, nprocs);
 }
 
 void thread_init(int id, void * handle)
