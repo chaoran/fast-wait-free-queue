@@ -341,29 +341,31 @@ static uint64_t lcrq_get() {
 }
 
 #ifdef BENCHMARK
+#include <stdint.h>
 
-typedef int thread_local_t;
-#include "bench.h"
+static int n = 10000000;
 
-void enqueue(void * val, void * args)
-{
-  lcrq_put((uint64_t) val);
-}
-
-void * dequeue(void * args)
-{
-  uint64_t val;
-  while ((val = lcrq_get()) == (uint64_t) -1);
-
-  return (void *) val;
-}
-
-void init(int nprocs)
+int init(int nprocs)
 {
   SHARED_OBJECT_INIT();
+  n /= nprocs;
+  return n;
 }
 
-void thread_init(int id, void * args) {}
-void thread_exit(int id, void * args) {}
+int test(int id)
+{
+  uint64_t val = id + 1;
+  int i;
+
+  for (i = 0; i < n; ++i) {
+    lcrq_put(val);
+    while ((val = lcrq_get()) == (uint64_t) -1);
+  }
+
+  return (int) val;
+}
+
+void thread_init(int id) {}
+void thread_exit(int id) {}
 
 #endif

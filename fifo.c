@@ -224,45 +224,44 @@ void fifo_unregister(fifo_t * fifo, handle_t * me)
 }
 
 #ifdef BENCHMARK
-
-typedef fifo_handle_t thread_local_t;
-#include "bench.h"
+#include <stdint.h>
 
 static fifo_t fifo;
+static fifo_handle_t ** handles;
+static int n = 10000000;
 
-void init(int nprocs)
+int init(int nprocs)
 {
   fifo_init(&fifo, 510, nprocs);
+  handles = malloc(sizeof(fifo_handle_t * [nprocs]));
+
+  n /= nprocs;
+  return n;
 }
 
-void thread_init(int id, void * handle)
+void thread_init(int id)
 {
-  int i;
-  void * mem[100];
-
-  for (i = 0; i < 100; ++i) {
-    mem[i] = new_node(0, 511);
-  }
-  for (i = 0; i < 100; ++i) {
-    free(mem[i]);
-  }
-
+  fifo_handle_t * handle = malloc(sizeof(fifo_handle_t));
+  handles[id] = handle;
   fifo_register(&fifo, handle);
 }
 
-void thread_exit(int id, void * handle)
+void thread_exit(int id)
 {
-  fifo_unregister(&fifo, handle);
+  fifo_unregister(&fifo, handles[id]);
 }
 
-void enqueue(void * val, void * handle)
+int test(int id)
 {
-  fifo_put(&fifo, handle, val);
-}
+  void * val = (void *) (intptr_t) (id + 1);
+  int i;
 
-void * dequeue(void * handle)
-{
-  return fifo_get(&fifo, handle);
+  for (i = 0; i < n; ++i) {
+    fifo_put(&fifo, handles[id], val);
+    val = fifo_get(&fifo, handles[id]);
+  }
+
+  return (int) (intptr_t) val;
 }
 
 #endif

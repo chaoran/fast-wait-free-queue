@@ -1,11 +1,12 @@
-CC = cc
-CFLAGS = -g -O3 -pthread -D_GNU_SOURCE -DBENCHMARK -DMAX_THREADS=512
+TESTS = fifo lcrq ccqueue msqueue faa
 
-LDFLAGS = -pthread
-LDLIBS = -lpthread
-EXEC = faa lcrq fifo ccqueue msqueue
+CFLAGS = -g -O3 -DBENCHMARK -pthread
+LDLIBS = -lpthread -lm
 
-all: $(EXEC)
+all: $(TESTS)
+
+$(TESTS): verify.o cpumap.o main.o harness.o
 
 clean:
-	rm -rf $(EXEC) *.o
+	rm -f $(TESTS) *.o
+

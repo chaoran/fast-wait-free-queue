@@ -2,50 +2,43 @@
 
 #ifdef BENCHMARK
 
-typedef struct _thread_local_t {
-  int id;
-  QueueThreadState lqueue_struct;
-} thread_local_t;
+static QueueCCSynchStruct queue_object;
+static QueueThreadState ** lqueue_struct;
+static int n = 10000000;
 
-#include "bench.h"
-
-QueueCCSynchStruct queue_object;
-
-void init(int nprocs)
+int init(int nprocs)
 {
   queueCCSynchInit(&queue_object);
+  lqueue_struct = malloc(sizeof(QueueThreadState * [nprocs]));
+
+  n /= nprocs;
+  return n;
 }
 
-void thread_init(int id, void * args)
+void thread_init(int id)
 {
-  thread_local_t * state = (thread_local_t *) args;
-
-  state->id = id;
-  queueThreadStateInit(&queue_object, &state->lqueue_struct, id);
+  QueueThreadState * state = malloc(sizeof(QueueThreadState));
+  lqueue_struct[id] = state;
+  queueThreadStateInit(&queue_object, state, id);
 }
 
 void thread_exit(int id, void * args) {}
 
-void enqueue(void * val, void * args)
+int test(int id)
 {
-  thread_local_t * state = (thread_local_t *) args;
+  int val = id + 1;
+  int i;
 
-  applyEnqueue(&queue_object, &state->lqueue_struct,
-      (ArgVal) (size_t) val, state->id);
-}
+  for (i = 0; i < n; ++i) {
+    applyEnqueue(&queue_object, lqueue_struct[id],
+        (ArgVal) (size_t) val, id);
 
-void * dequeue(void * args)
-{
-  thread_local_t * state = (thread_local_t *) args;
+    do {
+      val = applyDequeue(&queue_object, lqueue_struct[id], id);
+    } while (val == -1);
+  }
 
-  int64_t val;
-
-  do {
-    val = applyDequeue(&queue_object,
-        &state->lqueue_struct, state->id);
-  } while (val == -1);
-
-  return (void *) val;
+  return val;
 }
 
 #endif

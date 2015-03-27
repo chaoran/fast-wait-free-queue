@@ -1,29 +1,30 @@
 #ifdef BENCHMARK
+#include <stdint.h>
 
-typedef void * thread_local_t;
-
-#include "bench.h"
+static int n = 10000000;
 
 #define fetch_and_add(p, v) __atomic_fetch_add(p, v, __ATOMIC_RELAXED)
 
-void init(int nprocs) {}
+int init(int nprocs) {
+  n /= nprocs;
+  return n;
+}
+
 void thread_init(int id, void * args) {}
 void thread_exit(int id, void * args) {}
 
-void enqueue(void * val, void * args)
+int test(int id)
 {
-  static size_t P __attribute__((aligned(64))) = 0;
-  fetch_and_add(&P, 1);
+  int i;
+  static int64_t P __attribute__((aligned(64))) = 0;
+  static int64_t C __attribute__((aligned(64))) = 0;
 
-  *(void **) args = val;
-}
+  for (i = 0; i < n; ++i) {
+    fetch_and_add(&P, 1);
+    fetch_and_add(&C, 1);
+  }
 
-void * dequeue(void * args)
-{
-  static size_t C __attribute__((aligned(64))) = 0;
-  fetch_and_add(&C, 1);
-
-  return *(void **) args;
+  return id + 1;
 }
 
 #endif

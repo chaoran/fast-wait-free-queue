@@ -109,34 +109,35 @@ void * msqueue_get(msqueue_t * q)
 }
 
 #ifdef BENCHMARK
+#include <stdint.h>
 
 static msqueue_t msqueue;
-typedef int thread_local_t;
+static int n = 10000000;
 
-#include "bench.h"
-
-void init(int nprocs)
+int init(int nprocs)
 {
   msqueue_init(&msqueue);
+  n /= nprocs;
+  return n;
 }
 
 void thread_init(int id, void * local) {};
 void thread_exit(int id, void * local) {};
 
-void enqueue(void * val, void * local)
+int test(int id)
 {
-  msqueue_put(&msqueue, val);
-}
+  void * val = (void *) (intptr_t) (id + 1);
+  int i;
 
-void * dequeue(void * local)
-{
-  void * val;
+  for (i = 0; i < n; ++i) {
+    msqueue_put(&msqueue, val);
 
-  do {
-    val = msqueue_get(&msqueue);
-  } while (val == (void *) -1);
+    do {
+      val = msqueue_get(&msqueue);
+    } while (val == (void *) -1);
+  }
 
-  return val;
+  return (int) (intptr_t) val;
 }
 
 #endif

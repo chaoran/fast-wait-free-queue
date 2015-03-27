@@ -7,7 +7,7 @@
 #include "pool.h"
 
 #define  GUARD          INT_MIN
-
+#define MAX_THREADS 512
 
 typedef struct Node {
     Object val;
