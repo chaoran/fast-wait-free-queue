@@ -166,7 +166,7 @@ int harness_exit()
   double cov = covs[iter];
 
   printf("  Steady-state iterations: %d~%d (cov=%.2f)\n",
-      iter - NUM_MEASS + 1, iter + 1, cov);
+      iter - NUM_MEASS + 2, iter + 1, cov);
   printf("  Number of measurements: %d\n", NUM_MEASS);
   printf("  Mean of elapsed time: %.2f ms\n", mean);
   printf("===========================================\n");
