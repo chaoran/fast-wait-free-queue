@@ -41,11 +41,9 @@ while true; do
   fi
 
   PRECISION=$(echo "$ERR / $MEAN" | bc -l)
-  C1=$(echo "$MEAN - $ERR" | bc -l)
-  C2=$(echo "$MEAN + $ERR" | bc -l)
 
   printf '#%-2d %.2f %.2f %.4f %.2f %.2f %.2f\n' \
-    $N $TIME $MEAN $STD $C1 $C2 $PRECISION
+    $N $TIME $MEAN $STD $ERR $PRECISION
 
   if (($N >= 30 || ($N > 5 && $(bc <<< "$PRECISION < 0.02") == 1))); then
     break
