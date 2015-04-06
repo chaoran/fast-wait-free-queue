@@ -64,7 +64,7 @@ inline static RetVal serialDequeue(void *state, ArgVal arg, int pid) {
     
     if (st->first->next != null){
         st->first = st->first->next;
-        return node->val;
+        return node->next->val;
     } else {
         return -1;
     }
