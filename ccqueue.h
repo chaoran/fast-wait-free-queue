@@ -3,76 +3,85 @@
 
 #include "ccsynch.h"
 
-#define MAX_THREADS 512
-
 #define CACHE_ALIGNED __attribute__((aligned(64)))
 
-typedef struct Node {
-  void * val;
-  volatile struct Node *next;
-} Node;
+typedef struct ccqueue_node_t {
+  void * data;
+  volatile struct ccqueue_node_t * next;
+} ccqueue_node_t;
 
-typedef struct QueueCCSynchStruct {
-  ccsynch_t enqueue_struct CACHE_ALIGNED;
-  ccsynch_t dequeue_struct CACHE_ALIGNED;
-  volatile Node *last CACHE_ALIGNED;
-  volatile Node *first CACHE_ALIGNED;
-} QueueCCSynchStruct;
+typedef struct _ccqueue_t {
+  ccsynch_t enq CACHE_ALIGNED;
+  ccsynch_t deq CACHE_ALIGNED;
+  volatile ccqueue_node_t * tail CACHE_ALIGNED;
+  volatile ccqueue_node_t * head CACHE_ALIGNED;
+} ccqueue_t;
 
-typedef struct QueueThreadState {
-  ccsynch_handle_t enqueue_thread_state;
-  ccsynch_handle_t dequeue_thread_state;
-} QueueThreadState;
+typedef struct _ccqueue_handle_t {
+  ccsynch_handle_t enq;
+  ccsynch_handle_t deq;
+} ccqueue_handle_t;
 
-inline static void serialEnqueue(void *state, void * arg) {
-  QueueCCSynchStruct *st = (QueueCCSynchStruct *)state;
-  Node *node;
+static inline
+void serialEnqueue(void *state, void * arg) {
+  ccqueue_t *queue = (ccqueue_t *) state;
+  ccqueue_node_t *node;
 
-  node = malloc(sizeof(Node));
+  node = malloc(sizeof(ccqueue_node_t));
   node->next = NULL;
-  node->val = arg;
-  st->last->next = node;
-  st->last = node;
+  node->data = arg;
+  queue->tail->next = node;
+  queue->tail = node;
 }
 
-inline static void serialDequeue(void *state, void * arg) {
-  QueueCCSynchStruct *st = (QueueCCSynchStruct *)state;
+static inline
+void serialDequeue(void *state, void * arg) {
+  ccqueue_t * queue = (ccqueue_t *) state;
   void ** ptr = (void **) arg;
-  Node *node = (Node *)st->first;
+  ccqueue_node_t *node = (ccqueue_node_t *)queue->head;
 
-  if (st->first->next != NULL){
-    st->first = st->first->next;
+  if (queue->head->next != NULL){
+    queue->head = queue->head->next;
     free(node);
-    *ptr = st->first->val;
+    *ptr = queue->head->data;
   } else {
     *ptr = (void *) -1;
   }
 }
 
-inline static void queueCCSynchInit(QueueCCSynchStruct *queue_object_struct) {
-  ccsynch_init(&queue_object_struct->enqueue_struct, &serialEnqueue, queue_object_struct);
-  ccsynch_init(&queue_object_struct->dequeue_struct, &serialDequeue, queue_object_struct);
+static inline
+void ccqueue_init(ccqueue_t *queue)
+{
+  ccsynch_init(&queue->enq, &serialEnqueue, queue);
+  ccsynch_init(&queue->deq, &serialDequeue, queue);
 
-  Node * dummy = malloc(sizeof(Node));
-  dummy->val = 0;
+  ccqueue_node_t * dummy = malloc(sizeof(ccqueue_node_t));
+  dummy->data = 0;
   dummy->next = NULL;
 
-  queue_object_struct->first = dummy;
-  queue_object_struct->last = dummy;
+  queue->head = dummy;
+  queue->tail = dummy;
 }
 
-inline static void queueThreadStateInit(QueueCCSynchStruct *object_struct, QueueThreadState *lobject_struct) {
-  ccsynch_handle_init(&lobject_struct->enqueue_thread_state);
-  ccsynch_handle_init(&lobject_struct->dequeue_thread_state);
+static inline
+void ccqueue_handle_init(ccqueue_t *queue, ccqueue_handle_t *handle)
+{
+  ccsynch_handle_init(&handle->enq);
+  ccsynch_handle_init(&handle->deq);
 }
 
-inline static void applyEnqueue(QueueCCSynchStruct *object_struct, QueueThreadState *lobject_struct, void * arg) {
-  ccsynch_apply(&object_struct->enqueue_struct, &lobject_struct->enqueue_thread_state, arg);
+static inline
+void ccqueue_enq(ccqueue_t *queue, ccqueue_handle_t *handle, void * arg)
+{
+  ccsynch_apply(&queue->enq, &handle->enq, arg);
 }
 
-inline static void * applyDequeue(QueueCCSynchStruct *object_struct, QueueThreadState *lobject_struct) {
+static inline
+void * ccqueue_deq(ccqueue_t *queue, ccqueue_handle_t *handle)
+{
   void * data;
-  ccsynch_apply(&object_struct->dequeue_struct, &lobject_struct->dequeue_thread_state, &data);
+  ccsynch_apply(&queue->deq, &handle->deq, &data);
   return data;
 }
+
 #endif
