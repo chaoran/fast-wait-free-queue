@@ -24,23 +24,6 @@ typedef struct QueueThreadState {
   ThreadState dequeue_thread_state;
 } QueueThreadState;
 
-inline static void queueCCSynchInit(QueueCCSynchStruct *queue_object_struct) {
-  CCSynchStructInit(&queue_object_struct->enqueue_struct);
-  CCSynchStructInit(&queue_object_struct->dequeue_struct);
-
-  Node * dummy = malloc(sizeof(Node));
-  dummy->val = 0;
-  dummy->next = NULL;
-
-  queue_object_struct->first = dummy;
-  queue_object_struct->last = dummy;
-}
-
-inline static void queueThreadStateInit(QueueCCSynchStruct *object_struct, QueueThreadState *lobject_struct, int pid) {
-  threadStateInit(&lobject_struct->enqueue_thread_state, (int)pid);
-  threadStateInit(&lobject_struct->dequeue_thread_state, (int)pid);
-}
-
 inline static void * serialEnqueue(void *state, void * arg) {
   QueueCCSynchStruct *st = (QueueCCSynchStruct *)state;
   Node *node;
@@ -67,11 +50,28 @@ inline static void * serialDequeue(void *state, void * arg) {
   }
 }
 
+inline static void queueCCSynchInit(QueueCCSynchStruct *queue_object_struct) {
+  CCSynchStructInit(&queue_object_struct->enqueue_struct, &serialEnqueue, queue_object_struct);
+  CCSynchStructInit(&queue_object_struct->dequeue_struct, &serialDequeue, queue_object_struct);
+
+  Node * dummy = malloc(sizeof(Node));
+  dummy->val = 0;
+  dummy->next = NULL;
+
+  queue_object_struct->first = dummy;
+  queue_object_struct->last = dummy;
+}
+
+inline static void queueThreadStateInit(QueueCCSynchStruct *object_struct, QueueThreadState *lobject_struct, int pid) {
+  threadStateInit(&lobject_struct->enqueue_thread_state, (int)pid);
+  threadStateInit(&lobject_struct->dequeue_thread_state, (int)pid);
+}
+
 inline static void applyEnqueue(QueueCCSynchStruct *object_struct, QueueThreadState *lobject_struct, void * arg) {
-  applyOp(&object_struct->enqueue_struct, &lobject_struct->enqueue_thread_state, serialEnqueue, object_struct, arg);
+  applyOp(&object_struct->enqueue_struct, &lobject_struct->enqueue_thread_state, arg);
 }
 
 inline static void * applyDequeue(QueueCCSynchStruct *object_struct, QueueThreadState *lobject_struct) {
-  return applyOp(&object_struct->dequeue_struct, &lobject_struct->dequeue_thread_state, serialDequeue, object_struct, NULL);
+  return applyOp(&object_struct->dequeue_struct, &lobject_struct->dequeue_thread_state, NULL);
 }
 #endif

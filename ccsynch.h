@@ -22,7 +22,9 @@ typedef struct ThreadState {
 #define CACHE_ALIGNED __attribute__((aligned(64)))
 
 typedef struct CCSynchStruct {
-  CCSynchNode * volatile Tail CACHE_ALIGNED;
+  CCSynchNode * volatile tail CACHE_ALIGNED;
+  void * (*apply)(void *, void *);
+  void * state;
 } CCSynchStruct;
 
 
@@ -33,7 +35,7 @@ inline static void threadStateInit(ThreadState *st_thread, int pid) {
 #define spin_while(cond) while (cond) __asm__("pause")
 #define swap(ptr, val) __sync_lock_test_and_set(ptr, val)
 
-inline static void * applyOp(CCSynchStruct *l, ThreadState *st_thread, void * (*sfunc)(void *, void *), void *state, void * arg) {
+inline static void * applyOp(CCSynchStruct *l, ThreadState *st_thread, void * arg) {
   CCSynchNode *p;
   CCSynchNode *cur;
   CCSynchNode *next_node, *tmp_next;
@@ -43,7 +45,7 @@ inline static void * applyOp(CCSynchStruct *l, ThreadState *st_thread, void * (*
   next_node->next = NULL;
   next_node->status = WAIT;
 
-  cur = swap(&l->Tail, next_node);
+  cur = swap(&l->tail, next_node);
   cur->arg_ret = arg;
   cur->next = (CCSynchNode *)next_node;
   st_thread->next_node = (CCSynchNode *)cur;
@@ -58,7 +60,7 @@ inline static void * applyOp(CCSynchStruct *l, ThreadState *st_thread, void * (*
   while (p->next != NULL && counter < CCSYNCH_HELP_BOUND) {
     counter++;
     tmp_next = p->next;
-    p->arg_ret = sfunc(state, p->arg_ret);
+    p->arg_ret = (*l->apply)(l->state, p->arg_ret);
     p->status = DONE;
     p = tmp_next;
   }
@@ -69,10 +71,13 @@ inline static void * applyOp(CCSynchStruct *l, ThreadState *st_thread, void * (*
   return cur->arg_ret;
 }
 
-void CCSynchStructInit(CCSynchStruct *l) {
-  l->Tail = malloc(sizeof(CCSynchNode));
-  l->Tail->next = NULL;
-  l->Tail->status = READY;
+void CCSynchStructInit(CCSynchStruct *l, void * (*apply)(void *, void *), void * state) {
+  l->tail = malloc(sizeof(CCSynchNode));
+  l->tail->next = NULL;
+  l->tail->status = READY;
+
+  l->apply = apply;
+  l->state = state;
 
   __asm__ ("sfence");
 }
