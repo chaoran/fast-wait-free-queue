@@ -2,6 +2,7 @@
 #include <sched.h>
 #include <unistd.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
 #include "harness.h"
@@ -26,6 +27,8 @@ static void * thread_main(void * id_)
   thread_init(id);
   harness_exec(id);
   thread_exit(id);
+
+  return NULL;
 }
 
 int main(int argc, const char *argv[])

@@ -29,15 +29,9 @@ static int * results;
 
 static size_t elapsed_time(size_t ms)
 {
-#if _POSIX_C_SOURCE >= 199309L
-  struct timespec t;
-  clock_gettime(CLOCK_MONOTONIC_RAW, &t);
-  return t.tv_sec * 1000000 + t.tv_nsec / 1000 - ms;
-#else
   struct timeval t;
   gettimeofday(&t, NULL);
   return t.tv_sec * 1000000 + t.tv_usec - ms;
-#endif
 }
 
 static double compute_mean(const double * times)

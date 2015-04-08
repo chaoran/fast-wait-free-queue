@@ -21,7 +21,7 @@ int verify(int nprocs, int * results)
 
   for (i = 0; i < nprocs; ++i) {
     if (results[i] != i + 1) {
-      fprintf(stderr, "expected %ld but received %ld\n", i + 1, results[i]);
+      fprintf(stderr, "expected %d but received %d\n", i + 1, results[i]);
       ret = 1;
     }
   }
