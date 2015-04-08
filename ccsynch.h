@@ -23,7 +23,7 @@ typedef struct ThreadState {
 
 typedef struct CCSynchStruct {
   CCSynchNode * volatile tail CACHE_ALIGNED;
-  void * (*apply)(void *, void *);
+  void (*apply)(void *, void *);
   void * state;
 } CCSynchStruct;
 
@@ -60,7 +60,7 @@ inline static void * applyOp(CCSynchStruct *l, ThreadState *st_thread, void * ar
   while (p->next != NULL && counter < CCSYNCH_HELP_BOUND) {
     counter++;
     tmp_next = p->next;
-    p->arg_ret = (*l->apply)(l->state, p->arg_ret);
+    (*l->apply)(l->state, p->arg_ret);
     p->status = DONE;
     p = tmp_next;
   }
@@ -71,7 +71,7 @@ inline static void * applyOp(CCSynchStruct *l, ThreadState *st_thread, void * ar
   return cur->arg_ret;
 }
 
-void CCSynchStructInit(CCSynchStruct *l, void * (*apply)(void *, void *), void * state) {
+void CCSynchStructInit(CCSynchStruct *l, void (*apply)(void *, void *), void * state) {
   l->tail = malloc(sizeof(CCSynchNode));
   l->tail->next = NULL;
   l->tail->status = READY;

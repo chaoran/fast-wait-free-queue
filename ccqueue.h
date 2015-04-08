@@ -24,7 +24,7 @@ typedef struct QueueThreadState {
   ThreadState dequeue_thread_state;
 } QueueThreadState;
 
-inline static void * serialEnqueue(void *state, void * arg) {
+inline static void serialEnqueue(void *state, void * arg) {
   QueueCCSynchStruct *st = (QueueCCSynchStruct *)state;
   Node *node;
 
@@ -33,20 +33,19 @@ inline static void * serialEnqueue(void *state, void * arg) {
   node->val = arg;
   st->last->next = node;
   st->last = node;
-
-  return (void *) -1;
 }
 
-inline static void * serialDequeue(void *state, void * arg) {
+inline static void serialDequeue(void *state, void * arg) {
   QueueCCSynchStruct *st = (QueueCCSynchStruct *)state;
+  void ** ptr = (void **) arg;
   Node *node = (Node *)st->first;
 
   if (st->first->next != NULL){
     st->first = st->first->next;
     free(node);
-    return st->first->val;
+    *ptr = st->first->val;
   } else {
-    return (void *) -1;
+    *ptr = (void *) -1;
   }
 }
 
@@ -72,6 +71,8 @@ inline static void applyEnqueue(QueueCCSynchStruct *object_struct, QueueThreadSt
 }
 
 inline static void * applyDequeue(QueueCCSynchStruct *object_struct, QueueThreadState *lobject_struct) {
-  return applyOp(&object_struct->dequeue_struct, &lobject_struct->dequeue_thread_state, NULL);
+  void * data;
+  applyOp(&object_struct->dequeue_struct, &lobject_struct->dequeue_thread_state, &data);
+  return data;
 }
 #endif
