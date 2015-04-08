@@ -36,53 +36,45 @@ inline static void ccsynch_handle_init(ccsynch_handle_t * handle)
 #define swap(ptr, val) __sync_lock_test_and_set(ptr, val)
 
 static inline
-void * ccsynch_apply(ccsynch_t * synch, ccsynch_handle_t * handle, void * arg)
+void ccsynch_apply(ccsynch_t * synch, ccsynch_handle_t * handle, void * arg)
 {
-  ccsynch_node_t *p;
-  ccsynch_node_t *cur;
-  ccsynch_node_t *next, *tmp_next;
-  int counter = 0;
-
-  next = handle->next;
+  ccsynch_node_t * next = handle->next;
   next->next = NULL;
   next->status = WAIT;
 
-  cur = swap(&synch->tail, next);
-  cur->arg = arg;
-  cur->next = (ccsynch_node_t *)next;
-  handle->next = (ccsynch_node_t *)cur;
+  ccsynch_node_t * curr = swap(&synch->tail, next);
+  curr->arg = arg;
+  curr->next = (ccsynch_node_t *)next;
+  handle->next = (ccsynch_node_t *)curr;
 
-  spin_while(cur->status == WAIT);
+  spin_while(curr->status == WAIT);
 
-  if (cur->status == DONE) {                   // I have been helped
-    return cur->arg;
+  if (curr->status != DONE) {
+    (*synch->apply)(synch->state, arg);
+    curr = next;
+    next = curr->next;
+
+    int counter = 0;
+
+    while (next && counter++ < CCSYNCH_HELP_BOUND) {
+      (*synch->apply)(synch->state, curr->arg);
+      curr->status = DONE;
+      curr = next;
+      next = curr->next;
+    }
+
+    curr->status = READY;
   }
-
-  p = cur;                                // I am not been helped
-  while (p->next != NULL && counter < CCSYNCH_HELP_BOUND) {
-    counter++;
-    tmp_next = p->next;
-    (*synch->apply)(synch->state, p->arg);
-    p->status = DONE;
-    p = tmp_next;
-  }
-
-  p->status = READY;
-  __asm__ ("sfence");
-
-  return cur->arg;
 }
 
-void ccsynch_init(ccsynch_t * synch, void (*apply)(void *, void *), void * state)
+void ccsynch_init(ccsynch_t * synch, void (*fn)(void *, void *), void * state)
 {
   synch->tail = malloc(sizeof(ccsynch_node_t));
   synch->tail->next = NULL;
   synch->tail->status = READY;
 
-  synch->apply = apply;
+  synch->apply = fn;
   synch->state = state;
-
-  __asm__ ("sfence");
 }
 
 #endif
