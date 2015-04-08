@@ -26,15 +26,15 @@ void thread_exit(int id, void * args) {}
 
 int test(int id)
 {
-  int val = id + 1;
+  size_t val = id + 1;
   int i;
 
   for (i = 0; i < n; ++i) {
     applyEnqueue(&queue_object, lqueue_struct[id],
-        (ArgVal) (size_t) val, id);
+        (void *) val, id);
 
     do {
-      val = applyDequeue(&queue_object, lqueue_struct[id], id);
+      val = (size_t) applyDequeue(&queue_object, lqueue_struct[id], id);
     } while (val == -1);
   }
 
