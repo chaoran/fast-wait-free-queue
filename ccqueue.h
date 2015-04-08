@@ -41,7 +41,7 @@ inline static void queueThreadStateInit(QueueCCSynchStruct *object_struct, Queue
   threadStateInit(&lobject_struct->dequeue_thread_state, (int)pid);
 }
 
-inline static void * serialEnqueue(void *state, void * arg, int pid) {
+inline static void * serialEnqueue(void *state, void * arg) {
   QueueCCSynchStruct *st = (QueueCCSynchStruct *)state;
   Node *node;
 
@@ -54,7 +54,7 @@ inline static void * serialEnqueue(void *state, void * arg, int pid) {
   return (void *) -1;
 }
 
-inline static void * serialDequeue(void *state, void * arg, int pid) {
+inline static void * serialDequeue(void *state, void * arg) {
   QueueCCSynchStruct *st = (QueueCCSynchStruct *)state;
   Node *node = (Node *)st->first;
 
@@ -67,11 +67,11 @@ inline static void * serialDequeue(void *state, void * arg, int pid) {
   }
 }
 
-inline static void applyEnqueue(QueueCCSynchStruct *object_struct, QueueThreadState *lobject_struct, void * arg, int pid) {
-  applyOp(&object_struct->enqueue_struct, &lobject_struct->enqueue_thread_state, serialEnqueue, object_struct, arg, pid);
+inline static void applyEnqueue(QueueCCSynchStruct *object_struct, QueueThreadState *lobject_struct, void * arg) {
+  applyOp(&object_struct->enqueue_struct, &lobject_struct->enqueue_thread_state, serialEnqueue, object_struct, arg);
 }
 
-inline static void * applyDequeue(QueueCCSynchStruct *object_struct, QueueThreadState *lobject_struct, int pid) {
-  return applyOp(&object_struct->dequeue_struct, &lobject_struct->dequeue_thread_state, serialDequeue, object_struct, (void *) (size_t) pid, pid);
+inline static void * applyDequeue(QueueCCSynchStruct *object_struct, QueueThreadState *lobject_struct) {
+  return applyOp(&object_struct->dequeue_struct, &lobject_struct->dequeue_thread_state, serialDequeue, object_struct, NULL);
 }
 #endif

@@ -31,10 +31,10 @@ int test(int id)
 
   for (i = 0; i < n; ++i) {
     applyEnqueue(&queue_object, lqueue_struct[id],
-        (void *) val, id);
+        (void *) val);
 
     do {
-      val = (size_t) applyDequeue(&queue_object, lqueue_struct[id], id);
+      val = (size_t) applyDequeue(&queue_object, lqueue_struct[id]);
     } while (val == -1);
   }
 
