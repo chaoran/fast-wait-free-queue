@@ -19,7 +19,7 @@ void thread_init(int id)
 {
   QueueThreadState * state = malloc(sizeof(QueueThreadState));
   lqueue_struct[id] = state;
-  queueThreadStateInit(&queue_object, state, id);
+  queueThreadStateInit(&queue_object, state);
 }
 
 void thread_exit(int id, void * args) {}

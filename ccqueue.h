@@ -13,15 +13,15 @@ typedef struct Node {
 } Node;
 
 typedef struct QueueCCSynchStruct {
-  CCSynchStruct enqueue_struct CACHE_ALIGNED;
-  CCSynchStruct dequeue_struct CACHE_ALIGNED;
+  ccsynch_t enqueue_struct CACHE_ALIGNED;
+  ccsynch_t dequeue_struct CACHE_ALIGNED;
   volatile Node *last CACHE_ALIGNED;
   volatile Node *first CACHE_ALIGNED;
 } QueueCCSynchStruct;
 
 typedef struct QueueThreadState {
-  ThreadState enqueue_thread_state;
-  ThreadState dequeue_thread_state;
+  ccsynch_handle_t enqueue_thread_state;
+  ccsynch_handle_t dequeue_thread_state;
 } QueueThreadState;
 
 inline static void serialEnqueue(void *state, void * arg) {
@@ -50,8 +50,8 @@ inline static void serialDequeue(void *state, void * arg) {
 }
 
 inline static void queueCCSynchInit(QueueCCSynchStruct *queue_object_struct) {
-  CCSynchStructInit(&queue_object_struct->enqueue_struct, &serialEnqueue, queue_object_struct);
-  CCSynchStructInit(&queue_object_struct->dequeue_struct, &serialDequeue, queue_object_struct);
+  ccsynch_init(&queue_object_struct->enqueue_struct, &serialEnqueue, queue_object_struct);
+  ccsynch_init(&queue_object_struct->dequeue_struct, &serialDequeue, queue_object_struct);
 
   Node * dummy = malloc(sizeof(Node));
   dummy->val = 0;
@@ -61,18 +61,18 @@ inline static void queueCCSynchInit(QueueCCSynchStruct *queue_object_struct) {
   queue_object_struct->last = dummy;
 }
 
-inline static void queueThreadStateInit(QueueCCSynchStruct *object_struct, QueueThreadState *lobject_struct, int pid) {
-  threadStateInit(&lobject_struct->enqueue_thread_state, (int)pid);
-  threadStateInit(&lobject_struct->dequeue_thread_state, (int)pid);
+inline static void queueThreadStateInit(QueueCCSynchStruct *object_struct, QueueThreadState *lobject_struct) {
+  ccsynch_handle_init(&lobject_struct->enqueue_thread_state);
+  ccsynch_handle_init(&lobject_struct->dequeue_thread_state);
 }
 
 inline static void applyEnqueue(QueueCCSynchStruct *object_struct, QueueThreadState *lobject_struct, void * arg) {
-  applyOp(&object_struct->enqueue_struct, &lobject_struct->enqueue_thread_state, arg);
+  ccsynch_apply(&object_struct->enqueue_struct, &lobject_struct->enqueue_thread_state, arg);
 }
 
 inline static void * applyDequeue(QueueCCSynchStruct *object_struct, QueueThreadState *lobject_struct) {
   void * data;
-  applyOp(&object_struct->dequeue_struct, &lobject_struct->dequeue_thread_state, &data);
+  ccsynch_apply(&object_struct->dequeue_struct, &lobject_struct->dequeue_thread_state, &data);
   return data;
 }
 #endif
