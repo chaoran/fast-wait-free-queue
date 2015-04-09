@@ -7,8 +7,6 @@ all: $(TESTS)
 
 $(TESTS): verify.o cpumap.o main.o harness.o
 
-ccqueue: ccsynch.o
-
 clean:
 	rm -f $(TESTS) *.o
 

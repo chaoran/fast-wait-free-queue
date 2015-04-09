@@ -1,61 +1,60 @@
 #include <stdlib.h>
+#include "align.h"
 #include "ccsynch.h"
 
-#define CACHE_ALIGNED __attribute__((aligned(64)))
-
-typedef struct _ccqueue_node_t {
-  struct _ccqueue_node_t * volatile next;
-  void * data;
-} ccqueue_node_t;
+typedef struct _node_t {
+  struct _node_t * next;
+  void * volatile data;
+} node_t;
 
 typedef struct _ccqueue_t {
   ccsynch_t enq CACHE_ALIGNED;
   ccsynch_t deq CACHE_ALIGNED;
-  ccqueue_node_t * volatile head CACHE_ALIGNED;
-  ccqueue_node_t * volatile tail CACHE_ALIGNED;
+  node_t * head CACHE_ALIGNED;
+  node_t * tail CACHE_ALIGNED;
 } ccqueue_t;
 
-typedef struct _ccqueue_handle_t {
+typedef struct _handle_t {
   ccsynch_handle_t enq;
   ccsynch_handle_t deq;
-} ccqueue_handle_t;
+} handle_t;
 
 static inline
 void serialEnqueue(void * state, void * data)
 {
-  ccqueue_t * queue = (ccqueue_t *) state;
+  node_t * volatile * tail = (node_t **) state;
+  node_t * node = (node_t *) data;
 
-  ccqueue_node_t * node = malloc(sizeof(ccqueue_node_t));
   node->next = NULL;
-  node->data = data;
 
-  queue->tail->next = node;
-  queue->tail = node;
+  (*tail)->next = node;
+  *tail = node;
 }
 
 static inline
 void serialDequeue(void * state, void * data)
 {
-  ccqueue_t * queue = (ccqueue_t *) state;
-  void ** ptr = (void **) data;
+  node_t * volatile * head = (node_t **) state;
+  node_t ** ptr = (node_t **) data;
 
-  ccqueue_node_t * node = (ccqueue_node_t *) queue->head;
+  node_t * node = *head;
+  node_t * next = node->next;
 
-  if (node->next) {
-    queue->head = node->next;
-    free(node);
-    *ptr = queue->head->data;
+  if (next) {
+    node->data = next->data;
+    *head = next;
+    *ptr = node;
   } else {
-    *ptr = (void *) -1;
+    *ptr = NULL;
   }
 }
 
 void ccqueue_init(ccqueue_t * queue)
 {
-  ccsynch_init(&queue->enq, &serialEnqueue, queue);
-  ccsynch_init(&queue->deq, &serialDequeue, queue);
+  ccsynch_init(&queue->enq);
+  ccsynch_init(&queue->deq);
 
-  ccqueue_node_t * dummy = malloc(sizeof(ccqueue_node_t));
+  node_t * dummy = align_malloc(sizeof(node_t), CACHE_LINE_SIZE);
   dummy->data = 0;
   dummy->next = NULL;
 
@@ -63,34 +62,35 @@ void ccqueue_init(ccqueue_t * queue)
   queue->tail = dummy;
 }
 
-void ccqueue_handle_init(ccqueue_t * queue, ccqueue_handle_t * handle)
+void ccqueue_handle_init(ccqueue_t * queue, handle_t * handle)
 {
   ccsynch_handle_init(&handle->enq);
   ccsynch_handle_init(&handle->deq);
 }
 
-void ccqueue_enq(ccqueue_t * queue, ccqueue_handle_t * handle, void * data)
+void ccqueue_enq(ccqueue_t * queue, handle_t * handle,
+    node_t * node)
 {
-  ccsynch_apply(&queue->enq, &handle->enq, data);
+  ccsynch_apply(&queue->enq, &handle->enq, &serialEnqueue, &queue->tail, node);
 }
 
-void * ccqueue_deq(ccqueue_t * queue, ccqueue_handle_t * handle)
+node_t * ccqueue_deq(ccqueue_t * queue, handle_t * handle)
 {
-  void * data;
-  ccsynch_apply(&queue->deq, &handle->deq, &data);
-  return data;
+  node_t * node;
+  ccsynch_apply(&queue->deq, &handle->deq, &serialDequeue, &queue->head, &node);
+  return node;
 }
 
 #ifdef BENCHMARK
 
 static ccqueue_t queue;
-static ccqueue_handle_t ** handles;
+static handle_t ** handles;
 static int n = 10000000;
 
 int init(int nprocs)
 {
   ccqueue_init(&queue);
-  handles = malloc(sizeof(ccqueue_handle_t * [nprocs]));
+  handles = malloc(sizeof(handle_t * [nprocs]));
 
   n /= nprocs;
   return n;
@@ -98,7 +98,7 @@ int init(int nprocs)
 
 void thread_init(int id)
 {
-  ccqueue_handle_t * handle = malloc(sizeof(ccqueue_handle_t));
+  handle_t * handle = malloc(sizeof(handle_t));
   handles[id] = handle;
   ccqueue_handle_init(&queue, handle);
 }
@@ -110,16 +110,19 @@ int test(int id)
   size_t val = id + 1;
   int i;
 
-  ccqueue_handle_t * handle = handles[id];
+  handle_t * handle = handles[id];
+
+  node_t * node = align_malloc(sizeof(node_t), CACHE_LINE_SIZE);
+  node->data = (void *) val;
 
   for (i = 0; i < n; ++i) {
-    ccqueue_enq(&queue, handle, (void *) val);
+    ccqueue_enq(&queue, handle, node);
 
-    do val = (size_t) ccqueue_deq(&queue, handle);
-    while (val == -1);
+    do node = ccqueue_deq(&queue, handle);
+    while (node == NULL);
   }
 
-  return val;
+  return (int) (size_t) node->data;
 }
 
 #endif
