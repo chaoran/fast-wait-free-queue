@@ -1,29 +1,24 @@
 #ifndef FIFO_H
 #define FIFO_H
 
-#define FIFO_CACHELINE_SIZE 64
-#define FIFO_DOUBLE_CACHELINE_SIZE (2 * FIFO_CACHELINE_SIZE)
-#define FIFO_CACHELINE_ALIGNED \
-  __attribute__((aligned(FIFO_CACHELINE_SIZE)))
-#define FIFO_DOUBLE_CACHELINE_ALIGNED \
-  __attribute__((aligned(FIFO_DOUBLE_CACHELINE_SIZE)))
+#include "align.h"
 
 struct _fifo_node_t;
 
-typedef struct FIFO_DOUBLE_CACHELINE_ALIGNED {
-  size_t enq FIFO_DOUBLE_CACHELINE_ALIGNED;
-  size_t deq FIFO_DOUBLE_CACHELINE_ALIGNED;
+typedef struct DOUBLE_CACHE_ALIGNED {
+  size_t enq DOUBLE_CACHE_ALIGNED;
+  size_t deq DOUBLE_CACHE_ALIGNED;
   struct {
     volatile size_t index;
     struct _fifo_node_t * node;
-  } head FIFO_DOUBLE_CACHELINE_ALIGNED;
+  } head DOUBLE_CACHE_ALIGNED;
   char lock;
   size_t size;
   size_t nprocs;
   struct _fifo_handle_t * plist;
 } fifo_t;
 
-typedef struct FIFO_DOUBLE_CACHELINE_ALIGNED _fifo_handle_t {
+typedef struct DOUBLE_CACHE_ALIGNED _fifo_handle_t {
   struct _fifo_node_t * hazard;
   struct _fifo_node_t * enq;
   struct _fifo_node_t * deq;

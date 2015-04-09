@@ -3,6 +3,7 @@
 
 #include <stdlib.h>
 #include "align.h"
+#include "atomic.h"
 
 typedef struct _ccsynch_node_t {
   struct _ccsynch_node_t * volatile next CACHE_ALIGNED;
@@ -21,11 +22,6 @@ typedef struct _ccsynch_t {
 #define CCSYNCH_WAIT  0x0
 #define CCSYNCH_READY 0x1
 #define CCSYNCH_DONE  0x3
-
-#define spin_while(cond) while (cond) __asm__("pause")
-#define swap(ptr, val) __atomic_exchange_n(ptr, val, __ATOMIC_ACQ_REL)
-#define release(ptr, val) __atomic_store_n(ptr, val, __ATOMIC_RELEASE)
-#define acquire(ptr) __atomic_load_n(ptr, __ATOMIC_ACQUIRE)
 
 static inline
 void ccsynch_apply(ccsynch_t * synch, ccsynch_handle_t * handle,

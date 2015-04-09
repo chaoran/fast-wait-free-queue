@@ -2,37 +2,27 @@
 #include <stdlib.h>
 #include <string.h>
 #include "fifo.h"
+#include "atomic.h"
 
 typedef union {
   void * volatile data;
-  char padding[FIFO_CACHELINE_SIZE];
+  char padding[CACHE_LINE_SIZE];
 } cache_t;
 
 typedef struct _fifo_node_t {
-  struct _fifo_node_t * volatile next FIFO_CACHELINE_ALIGNED;
-  size_t id FIFO_CACHELINE_ALIGNED;
-  cache_t buffer[0] FIFO_CACHELINE_ALIGNED;
+  struct _fifo_node_t * volatile next CACHE_ALIGNED;
+  size_t id CACHE_ALIGNED;
+  cache_t buffer[0] CACHE_ALIGNED;
 } node_t;
 
 typedef fifo_handle_t handle_t;
-
-#define fetch_and_add(p, v) __atomic_fetch_add(p, v, __ATOMIC_RELAXED)
-#define compare_and_swap __sync_val_compare_and_swap
-#define spin_while(cond) while (cond) __asm__ ("pause")
-#define mfence() __atomic_thread_fence(__ATOMIC_SEQ_CST)
-#define cfence() __atomic_thread_fence(__ATOMIC_ACQ_REL)
-#define release(ptr, val) __atomic_store_n(ptr, val, __ATOMIC_RELEASE)
-#define lock(p) spin_while(__atomic_test_and_set(p, __ATOMIC_ACQUIRE))
-#define unlock(p) __atomic_clear(p, __ATOMIC_RELEASE)
 
 static inline
 node_t * new_node(size_t id, size_t size)
 {
   size = sizeof(node_t) + sizeof(cache_t [size]);
 
-  node_t * node;
-
-  posix_memalign((void **) &node, 4096, size);
+  node_t * node = align_malloc(size, PAGE_SIZE);
   memset(node, 0, size);
 
   node->id = id;
@@ -48,7 +38,6 @@ node_t * check(node_t ** pnode, node_t * volatile * phazard,
   if (phazard) {
     if (node->id < to->id) {
       node_t * curr = compare_and_swap(pnode, node, to);
-      cfence();
       node_t * hazard = *phazard;
       node = hazard ? hazard : (curr == node ? to : curr);
 
@@ -118,7 +107,7 @@ node_t * update(node_t * node, size_t to, size_t size, int * winner)
 }
 
 static inline
-node_t * acquire(node_t * volatile * pnode, node_t * volatile * phazard)
+node_t * locate(node_t * volatile * pnode, node_t * volatile * phazard)
 {
   node_t * node = *pnode;
   node_t * temp;
@@ -135,7 +124,7 @@ node_t * acquire(node_t * volatile * pnode, node_t * volatile * phazard)
 
 void fifo_put(fifo_t * fifo, handle_t * handle, void * data)
 {
-  node_t * node = acquire(&handle->enq, &handle->hazard);
+  node_t * node = locate(&handle->enq, &handle->hazard);
 
   size_t i  = fetch_and_add(&fifo->enq, 1);
   size_t s  = fifo->size;
@@ -152,7 +141,7 @@ void fifo_put(fifo_t * fifo, handle_t * handle, void * data)
 
 void * fifo_get(fifo_t * fifo, handle_t * handle)
 {
-  node_t * node = acquire(&handle->deq, &handle->hazard);
+  node_t * node = locate(&handle->deq, &handle->hazard);
 
   size_t i  = fetch_and_add(&fifo->deq, 1);
   size_t s  = fifo->size;
