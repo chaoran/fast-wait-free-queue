@@ -8,9 +8,14 @@
   #define mfence() __atomic_thread_fence(__ATOMIC_SEQ_CST)
   #define compare_and_swap __sync_val_compare_and_swap
   #define fetch_and_add(ptr, val) __atomic_fetch_add(ptr, val, __ATOMIC_ACQ_REL)
-  #define swap(ptr, val) __atomic_exchange_n(ptr, __ATOMIC_ACQ_REL)
+  #define swap(ptr, val) __atomic_exchange_n(ptr, val, __ATOMIC_ACQ_REL)
   #define acquire(ptr) __atomic_load_n(ptr, __ATOMIC_ACQUIRE)
   #define release(ptr, val) __atomic_store_n(ptr, val, __ATOMIC_RELEASE)
+  #if defined(__x86_64__) || defined(_M_X64_)
+    #define spin_while(cond) while (cond) __asm__("pause")
+  #else
+    #define spin_while(cond) while (cond) __asm__("nop")
+  #endif
 #elif __GNUC__ >= 4 && __GNUC_MINOR__ >= 1
   #define lock(p) spin_while(__sync_lock_test_and_set(p, 1))
   #define unlock(p) __sync_lock_release(p)
