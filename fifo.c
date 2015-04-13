@@ -114,8 +114,8 @@ node_t * locate(node_t * volatile * pnode, node_t * volatile * phazard)
 
   do {
     temp = node;
+    cfence();
     *phazard = node;
-    mfence();
     node = *pnode;
   } while (node != temp);
 
