@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include <stdlib.h>
 #include "align.h"
 #include "ccsynch.h"
@@ -25,8 +26,6 @@ void serialEnqueue(void * state, void * data)
   node_t * volatile * tail = (node_t **) state;
   node_t * node = (node_t *) data;
 
-  node->next = NULL;
-
   (*tail)->next = node;
   *tail = node;
 }
@@ -43,10 +42,11 @@ void serialDequeue(void * state, void * data)
   if (next) {
     node->data = next->data;
     *head = next;
-    *ptr = node;
   } else {
-    *ptr = NULL;
+    node->data = (void *) -1;
   }
+
+  *ptr = node;
 }
 
 void ccqueue_init(ccqueue_t * queue)
@@ -68,17 +68,23 @@ void ccqueue_handle_init(ccqueue_t * queue, handle_t * handle)
   ccsynch_handle_init(&handle->deq);
 }
 
-void ccqueue_enq(ccqueue_t * queue, handle_t * handle,
-    node_t * node)
+void ccqueue_enq(ccqueue_t * queue, handle_t * handle, void * data)
 {
+  node_t * node = align_malloc(sizeof(node_t), CACHE_LINE_SIZE);
+  node->data = data;
+  node->next = NULL;
+
   ccsynch_apply(&queue->enq, &handle->enq, &serialEnqueue, &queue->tail, node);
 }
 
-node_t * ccqueue_deq(ccqueue_t * queue, handle_t * handle)
+void * ccqueue_deq(ccqueue_t * queue, handle_t * handle)
 {
   node_t * node;
   ccsynch_apply(&queue->deq, &handle->deq, &serialDequeue, &queue->head, &node);
-  return node;
+
+  void * data = node->data;
+  free(node);
+  return data;
 }
 
 #ifdef BENCHMARK
@@ -107,22 +113,19 @@ void thread_exit(int id, void * args) {}
 
 int test(int id)
 {
-  size_t val = id + 1;
+  intptr_t val = id + 1;
   int i;
 
   handle_t * handle = handles[id];
 
-  node_t * node = align_malloc(sizeof(node_t), CACHE_LINE_SIZE);
-  node->data = (void *) val;
-
   for (i = 0; i < n; ++i) {
-    ccqueue_enq(&queue, handle, node);
+    ccqueue_enq(&queue, handle, (void *) val);
 
-    do node = ccqueue_deq(&queue, handle);
-    while (node == NULL);
+    do val = (intptr_t) ccqueue_deq(&queue, handle);
+    while (val == -1);
   }
 
-  return (int) (size_t) node->data;
+  return (int) val;
 }
 
 #endif
