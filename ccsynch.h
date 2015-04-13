@@ -16,7 +16,7 @@ typedef struct _ccsynch_handle_t {
 } ccsynch_handle_t;
 
 typedef struct _ccsynch_t {
-  struct _ccsynch_node_t * volatile tail CACHE_ALIGNED;
+  struct _ccsynch_node_t * volatile tail DOUBLE_CACHE_ALIGNED;
 } ccsynch_t;
 
 #define CCSYNCH_WAIT  0x0
