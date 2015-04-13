@@ -1,20 +1,21 @@
 #include <stdlib.h>
+#include "align.h"
 #include "atomic.h"
 #include "hzdptr.h"
 
 typedef struct _node_t {
-  void * data;
+  void * data DOUBLE_CACHE_ALIGNED;
   struct _node_t * volatile next;
 } node_t;
 
 typedef struct _msqueue_t {
-  struct _node_t * volatile head;
-  struct _node_t * volatile tail;
+  struct _node_t * volatile head DOUBLE_CACHE_ALIGNED;
+  struct _node_t * volatile tail DOUBLE_CACHE_ALIGNED;
 } msqueue_t;
 
 void msqueue_init(msqueue_t * q)
 {
-  node_t * node = malloc(sizeof(node_t));
+  node_t * node = align_malloc(sizeof(node_t), CACHE_LINE_SIZE);
   node->next = NULL;
 
   q->head = node;
@@ -23,7 +24,7 @@ void msqueue_init(msqueue_t * q)
 
 void msqueue_put(msqueue_t * q, hzdptr_t * hzd, void * data)
 {
-  node_t * node = malloc(sizeof(node_t));
+  node_t * node = align_malloc(sizeof(node_t), CACHE_LINE_SIZE);
   node->data = data;
   node->next = NULL;
 
