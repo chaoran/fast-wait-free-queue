@@ -4,15 +4,15 @@
 #include "ccsynch.h"
 
 typedef struct _node_t {
-  struct _node_t * next;
+  struct _node_t * next CACHE_ALIGNED;
   void * volatile data;
 } node_t;
 
 typedef struct _ccqueue_t {
-  ccsynch_t enq CACHE_ALIGNED;
-  ccsynch_t deq CACHE_ALIGNED;
-  node_t * head CACHE_ALIGNED;
-  node_t * tail CACHE_ALIGNED;
+  ccsynch_t enq DOUBLE_CACHE_ALIGNED;
+  ccsynch_t deq DOUBLE_CACHE_ALIGNED;
+  node_t * head DOUBLE_CACHE_ALIGNED;
+  node_t * tail DOUBLE_CACHE_ALIGNED;
 } ccqueue_t;
 
 typedef struct _handle_t {

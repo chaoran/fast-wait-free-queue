@@ -29,6 +29,7 @@
   })
   #if defined(__powerpc64__) || defined(__ppc64__) || defined(__PPC64__) || \
       defined(__64BIT__) || defined(_LP64) || defined(__LP64__)
+    #define cfence() __asm__("lwsync\n\risync":::"memory")
     #define spin_while(cond) while (cond) __asm__("nop")
     #define acquire(ptr) ({ \
       typeof(*ptr) val = *ptr; \
