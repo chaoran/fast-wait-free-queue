@@ -6,7 +6,8 @@
   #define lock(p) spin_while(__atomic_test_and_set(p, __ATOMIC_ACQUIRE))
   #define unlock(p) __atomic_clear(p, __ATOMIC_RELEASE)
   #define mfence() __atomic_thread_fence(__ATOMIC_SEQ_CST)
-  #define compare_and_swap __sync_val_compare_and_swap
+  #define compare_and_swap(ptr, expected, desired) \
+    __atomic_compare_exchange_n(ptr, expected, desired, 0, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)
   #define fetch_and_add(ptr, val) __atomic_fetch_add(ptr, val, __ATOMIC_ACQ_REL)
   #define swap(ptr, val) __atomic_exchange_n(ptr, val, __ATOMIC_ACQ_REL)
   #define acquire_fence() __atomic_thread_fence(__ATOMIC_ACQUIRE)
