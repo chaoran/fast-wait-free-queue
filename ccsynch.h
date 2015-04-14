@@ -34,30 +34,37 @@ void ccsynch_apply(ccsynch_t * synch, ccsynch_handle_t * handle,
   ccsynch_node_t * curr = swap(&synch->tail, next);
   handle->next = curr;
 
-  int status = acquire(&curr->status);
+  int status = curr->status;
+  acquire_fence();
 
   if (status == CCSYNCH_WAIT) {
     curr->data = data;
-    release(&curr->next, next);
-    spin_while((status = acquire(&curr->status)) == CCSYNCH_WAIT);
+    release_fence();
+    curr->next = next;
+    spin_while((status = curr->status) == CCSYNCH_WAIT);
+    acquire_fence();
   }
 
   if (status != CCSYNCH_DONE) {
     apply(state, data);
     curr = next;
-    next = acquire(&curr->next);
+    next = curr->next;
+    acquire_fence();
 
     int count = 0;
     const int CCSYNCH_HELP_BOUND = 256;
 
     while (next && count++ < CCSYNCH_HELP_BOUND) {
       apply(state, curr->data);
-      release(&curr->status, CCSYNCH_DONE);
+      release_fence();
+      curr->status = CCSYNCH_DONE;
       curr = next;
-      next = acquire(&curr->next);
+      next = curr->next;
+      acquire_fence();
     }
 
-    release(&curr->status, CCSYNCH_READY);
+    release_fence();
+    curr->status = CCSYNCH_READY;
   }
 }
 

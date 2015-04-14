@@ -20,7 +20,8 @@ static inline
 void * hzdptr_load(hzdptr_t * hzd, int idx, void * volatile * ptr)
 {
   void * val = *ptr;
-  cfence();
+  release_fence();
+  acquire_fence();
   hzd->ptrs[idx] = val;
 
   return val;
@@ -33,8 +34,9 @@ void * hzdptr_loadv(hzdptr_t * hzd, int idx, void * volatile * ptr)
   void * tmp;
 
   do {
-    cfence();
     hzd->ptrs[idx] = val;
+    release_fence();
+    acquire_fence();
     tmp = val;
     val = *ptr;
   } while (tmp != val);

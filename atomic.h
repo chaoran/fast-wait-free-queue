@@ -6,12 +6,11 @@
   #define lock(p) spin_while(__atomic_test_and_set(p, __ATOMIC_ACQUIRE))
   #define unlock(p) __atomic_clear(p, __ATOMIC_RELEASE)
   #define mfence() __atomic_thread_fence(__ATOMIC_SEQ_CST)
-  #define cfence() __atomic_thread_fence(__ATOMIC_ACQ_REL)
   #define compare_and_swap __sync_val_compare_and_swap
   #define fetch_and_add(ptr, val) __atomic_fetch_add(ptr, val, __ATOMIC_ACQ_REL)
   #define swap(ptr, val) __atomic_exchange_n(ptr, val, __ATOMIC_ACQ_REL)
-  #define acquire(ptr) __atomic_load_n(ptr, __ATOMIC_ACQUIRE)
-  #define release(ptr, val) __atomic_store_n(ptr, val, __ATOMIC_RELEASE)
+  #define acquire_fence() __atomic_thread_fence(__ATOMIC_ACQUIRE)
+  #define release_fence() __atomic_thread_fence(__ATOMIC_RELEASE)
   #if defined(__x86_64__) || defined(_M_X64_)
     #define spin_while(cond) while (cond) __asm__("pause")
   #else
@@ -29,28 +28,13 @@
   })
   #if defined(__powerpc64__) || defined(__ppc64__) || defined(__PPC64__) || \
       defined(__64BIT__) || defined(_LP64) || defined(__LP64__)
-    #define cfence() __asm__("lwsync\n\risync":::"memory")
     #define spin_while(cond) while (cond) __asm__("nop")
-    #define acquire(ptr) ({ \
-      typeof(*ptr) val = *ptr; \
-      __asm__("isync":::"memory"); \
-      val; \
-    })
-    #define release(ptr, val) do { \
-      __asm__("lwsync":::"memory"); \
-      *ptr = val; \
-    } while (0)
+    #define acquire_fence() __asm__("isync":::"memory")
+    #define release_fence() __asm__("lwsync":::"memory")
   #elif defined(__x86_64__) || defined(_M_X64_)
     #define spin_while(cond) while (cond) __asm__("pause")
-    #define acquire(ptr) ({ \
-      typeof(*ptr) val = *ptr; \
-      __asm__("nop":::"memory"); \
-      val; \
-    })
-    #define release(ptr, val) do { \
-      __asm__("sfence":::"memory"); \
-      *ptr = val; \
-    } while (0)
+    #define acquire_fence() __asm__("nop":::"memory")
+    #define release_fence() __asm__("nop":::"memory")
   #else
     #error ("Error: Archtecture is not supported.")
   #endif

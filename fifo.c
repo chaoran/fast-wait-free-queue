@@ -78,7 +78,8 @@ void cleanup(fifo_t * fifo, node_t * head)
     }
 
     fifo->head.node = head;
-    release(&fifo->head.index, head->id);
+    release_fence();
+    fifo->head.index = head->id;
   }
 }
 
@@ -114,7 +115,8 @@ node_t * locate(node_t * volatile * pnode, node_t * volatile * phazard)
 
   do {
     temp = node;
-    cfence();
+    release_fence();
+    acquire_fence();
     *phazard = node;
     node = *pnode;
   } while (node != temp);
@@ -136,7 +138,8 @@ void fifo_put(fifo_t * fifo, handle_t * handle, void * data)
   }
 
   node->buffer[li].data = data;
-  release(&handle->hazard, NULL);
+  release_fence();
+  handle->hazard = NULL;
 }
 
 void * fifo_get(fifo_t * fifo, handle_t * handle)
@@ -160,7 +163,8 @@ void * fifo_get(fifo_t * fifo, handle_t * handle)
     handle->winner = 0;
   }
 
-  release(&handle->hazard, NULL);
+  release_fence();
+  handle->hazard = NULL;
   return val;
 }
 
