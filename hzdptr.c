@@ -51,33 +51,25 @@ static int htable_lookup(void ** tbl, size_t size, void * ptr)
   return 0;
 }
 
-hzdptr_t * hzdptr_init(int nprocs, int nptrs)
+void hzdptr_init(hzdptr_t * hzd, int nprocs, int nptrs)
 {
-  int n = HZDPTR_THRESHOLD(nprocs) + nptrs;
-
-  hzdptr_t * hzd = malloc(sizeof(hzdptr_t) + sizeof(void * [n]));
   hzd->nprocs = nprocs;
   hzd->nptrs  = nptrs;
   hzd->nretired = 0;
-  memset(hzd->ptrs, 0, sizeof(void * [n]));
+  memset(hzd->ptrs, 0, hzdptr_size(nprocs, nptrs));
 
   static hzdptr_t * volatile _tail;
   hzdptr_t * tail = _tail;
 
   if (tail == NULL) {
     hzd->next = hzd;
-
-    if (compare_and_swap(&_tail, &tail, hzd)) {
-      return hzd;
-    }
+    if (compare_and_swap(&_tail, &tail, hzd)) return;
   }
 
   hzdptr_t * next = tail->next;
 
   do hzd->next = next;
   while (compare_and_swap(&tail->next, &next, hzd));
-
-  return hzd;
 }
 
 void _hzdptr_retire(hzdptr_t * hzd, void ** rlist)

@@ -13,8 +13,14 @@ typedef struct _hzdptr_t {
 
 #define HZDPTR_THRESHOLD(nprocs) (2 * nprocs)
 
-extern hzdptr_t * hzdptr_init(int nprocs, int nptrs);
+extern void hzdptr_init(hzdptr_t * hzd, int nprocs, int nptrs);
 extern void _hzdptr_retire(hzdptr_t * hzd, void ** rlist);
+
+static inline
+int hzdptr_size(int nprocs, int nptrs)
+{
+  return sizeof(void * [HZDPTR_THRESHOLD(nprocs) + nptrs]);
+}
 
 static inline
 void * hzdptr_load(hzdptr_t * hzd, int idx, void * volatile * ptr)

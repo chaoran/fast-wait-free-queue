@@ -102,7 +102,8 @@ int init(int nprocs)
 }
 
 void thread_init(int id) {
-  hzdptrs[id] = hzdptr_init(_nprocs, 2);
+  hzdptrs[id] = malloc(sizeof(hzdptr_t) + hzdptr_size(_nprocs, 2));
+  hzdptr_init(hzdptrs[id], _nprocs, 2);
 };
 
 void thread_exit(int id, void * local) {};
