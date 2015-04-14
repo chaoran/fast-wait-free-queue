@@ -32,7 +32,7 @@ void msqueue_put(msqueue_t * q, hzdptr_t * hzd, void * data)
   node_t * next;
 
   while (1) {
-    tail = hzdptr_loadv(hzd, 0, (void * volatile *) &q->tail);
+    tail = hzdptr_setv(&q->tail, hzd, 0);
     next = tail->next;
 
     if (tail != q->tail) {
@@ -59,9 +59,9 @@ void * msqueue_get(msqueue_t * q, hzdptr_t * hzd)
   node_t * next;
 
   while (1) {
-    head = hzdptr_loadv(hzd, 0, (void * volatile *) &q->head);
+    head = hzdptr_setv(&q->head, hzd, 0);
     tail = q->tail;
-    next = hzdptr_load(hzd, 1, (void * volatile *) &head->next);
+    next = hzdptr_set(&head->next, hzd, 1);
 
     if (head != q->head) {
       continue;

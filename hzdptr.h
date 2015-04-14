@@ -23,31 +23,46 @@ int hzdptr_size(int nprocs, int nptrs)
 }
 
 static inline
-void * hzdptr_load(hzdptr_t * hzd, int idx, void * volatile * ptr)
+void * _hzdptr_set(void volatile * ptr_, void * hzd_)
 {
+  void * volatile * ptr = (void * volatile *) ptr_;
+  void * volatile * hzd = (void * volatile *) hzd_;
+
   void * val = *ptr;
-  release_fence();
-  acquire_fence();
-  hzd->ptrs[idx] = val;
+  *hzd = val;
+  return val;
+}
+
+static inline
+void * hzdptr_set(void volatile * ptr, hzdptr_t * hzd, int idx)
+{
+  return _hzdptr_set(ptr, &hzd->ptrs[idx]);
+}
+
+static inline
+void * _hzdptr_setv(void volatile * ptr_, void * hzd_)
+{
+  void * volatile * ptr = (void * volatile *) ptr_;
+  void * volatile * hzd = (void * volatile *) hzd_;
+
+  void * val = *ptr;
+  void * tmp;
+
+  do {
+    *hzd = val;
+    release_fence();
+    tmp = val;
+    acquire_fence();
+    val = *ptr;
+  } while (val != tmp);
 
   return val;
 }
 
 static inline
-void * hzdptr_loadv(hzdptr_t * hzd, int idx, void * volatile * ptr)
+void * hzdptr_setv(void volatile * ptr, hzdptr_t * hzd, int idx)
 {
-  void * val = *ptr;
-  void * tmp;
-
-  do {
-    hzd->ptrs[idx] = val;
-    release_fence();
-    acquire_fence();
-    tmp = val;
-    val = *ptr;
-  } while (tmp != val);
-
-  return val;
+  return _hzdptr_setv(ptr, &hzd->ptrs[idx]);
 }
 
 static inline
@@ -59,6 +74,22 @@ void hzdptr_retire(hzdptr_t * hzd, void * ptr)
   if (hzd->nretired == HZDPTR_THRESHOLD(hzd->nprocs)) {
     _hzdptr_retire(hzd, rlist);
   }
+}
+
+static void _hzdptr_enlist(hzdptr_t * hzd)
+{
+  static hzdptr_t * volatile _tail;
+  hzdptr_t * tail = _tail;
+
+  if (tail == NULL) {
+    hzd->next = hzd;
+    if (compare_and_swap(&_tail, &tail, hzd)) return;
+  }
+
+  hzdptr_t * next = tail->next;
+
+  do hzd->next = next;
+  while (compare_and_swap(&tail->next, &next, hzd));
 }
 
 #endif /* end of include guard: HZDPTR_H */

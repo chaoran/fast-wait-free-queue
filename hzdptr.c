@@ -58,18 +58,9 @@ void hzdptr_init(hzdptr_t * hzd, int nprocs, int nptrs)
   hzd->nretired = 0;
   memset(hzd->ptrs, 0, hzdptr_size(nprocs, nptrs));
 
-  static hzdptr_t * volatile _tail;
-  hzdptr_t * tail = _tail;
+  release_fence();
 
-  if (tail == NULL) {
-    hzd->next = hzd;
-    if (compare_and_swap(&_tail, &tail, hzd)) return;
-  }
-
-  hzdptr_t * next = tail->next;
-
-  do hzd->next = next;
-  while (compare_and_swap(&tail->next, &next, hzd));
+  _hzdptr_enlist(hzd);
 }
 
 void _hzdptr_retire(hzdptr_t * hzd, void ** rlist)
@@ -81,8 +72,7 @@ void _hzdptr_retire(hzdptr_t * hzd, void ** rlist)
   hzdptr_t * me = hzd;
   void * ptr;
 
-  /** Scan everyone's hazard pointers. */
-  do {
+  while ((hzd = hzd->next) != me) {
     int i;
     for (i = 0; i < hzd->nptrs; ++i) {
       ptr = hzd->ptrs[i];
@@ -91,9 +81,7 @@ void _hzdptr_retire(hzdptr_t * hzd, void ** rlist)
         htable_insert(plist, size, ptr);
       }
     }
-
-    hzd = hzd->next;
-  } while (hzd != me);
+  }
 
   int nretired = 0;
 
