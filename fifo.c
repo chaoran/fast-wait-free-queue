@@ -3,6 +3,7 @@
 #include <string.h>
 #include "fifo.h"
 #include "atomic.h"
+#include "hzdptr.h"
 
 typedef union {
   void * volatile data;
@@ -56,7 +57,7 @@ node_t * check(node_t ** pnode, node_t * volatile * phazard,
 }
 
 static inline
-void cleanup(fifo_t * fifo, node_t * head)
+void cleanup(fifo_t * fifo, node_t * head, handle_t * handle)
 {
   size_t  index = fifo->head.index;
   int threshold = 2 * fifo->nprocs;
@@ -66,7 +67,7 @@ void cleanup(fifo_t * fifo, node_t * head)
     node_t * curr = fifo->head.node;
     handle_t * p;
 
-    for (p = fifo->plist; p != NULL && curr != head; p = p->next) {
+    for (p = handle->next; p != handle && curr != head; p = p->next) {
       head = check(&p->hazard, NULL, head);
       head = check(&p->enq, &p->hazard, head);
       head = check(&p->deq, &p->hazard, head);
@@ -108,26 +109,9 @@ node_t * update(node_t * node, size_t to, size_t size, int * winner)
   return node;
 }
 
-static inline
-node_t * locate(node_t * volatile * pnode, node_t * volatile * phazard)
-{
-  node_t * node = *pnode;
-  node_t * temp;
-
-  do {
-    temp = node;
-    release_fence();
-    acquire_fence();
-    *phazard = node;
-    node = *pnode;
-  } while (node != temp);
-
-  return node;
-}
-
 void fifo_put(fifo_t * fifo, handle_t * handle, void * data)
 {
-  node_t * node = locate(&handle->enq, &handle->hazard);
+  node_t * node = _hzdptr_setv(&handle->enq, &handle->hazard);
 
   size_t i  = fetch_and_add(&fifo->enq, 1);
   size_t s  = fifo->size;
@@ -145,7 +129,7 @@ void fifo_put(fifo_t * fifo, handle_t * handle, void * data)
 
 void * fifo_get(fifo_t * fifo, handle_t * handle)
 {
-  node_t * node = locate(&handle->deq, &handle->hazard);
+  node_t * node = _hzdptr_setv(&handle->deq, &handle->hazard);
 
   size_t i  = fetch_and_add(&fifo->deq, 1);
   size_t s  = fifo->size;
@@ -160,7 +144,7 @@ void * fifo_get(fifo_t * fifo, handle_t * handle)
   spin_while(NULL == (val = node->buffer[li].data));
 
   if (handle->winner) {
-    cleanup(fifo, node);
+    cleanup(fifo, node, handle);
     handle->winner = 0;
   }
 
@@ -171,7 +155,6 @@ void * fifo_get(fifo_t * fifo, handle_t * handle)
 
 void fifo_init(fifo_t * fifo, size_t size, size_t width)
 {
-  fifo->lock = 0;
   fifo->size = size;
   fifo->nprocs = width;
 
@@ -179,8 +162,6 @@ void fifo_init(fifo_t * fifo, size_t size, size_t width)
   fifo->head.node = new_node(0, size);
   fifo->enq = 0;
   fifo->deq = 0;
-
-  fifo->plist = NULL;
 }
 
 void fifo_register(fifo_t * fifo, handle_t * me)
@@ -190,29 +171,7 @@ void fifo_register(fifo_t * fifo, handle_t * me)
   me->hazard = NULL;
   me->winner = 0;
 
-  handle_t * curr = fifo->plist;
-
-  do me->next = curr;
-  while (!compare_and_swap(&fifo->plist, &curr, me));
-}
-
-void fifo_unregister(fifo_t * fifo, handle_t * me)
-{
-  /** Remove myself from plist. */
-  lock(&fifo->lock);
-
-  fifo->nprocs -= 1;
-
-  handle_t * p = fifo->plist;
-
-  if (p == me) {
-    fifo->plist = me->next;
-  } else {
-    while (p->next != me) p = p->next;
-    p->next = me->next;
-  }
-
-  unlock(&fifo->lock);
+  _hzdptr_enlist((hzdptr_t *) me);
 }
 
 #ifdef BENCHMARK
@@ -238,10 +197,7 @@ void thread_init(int id)
   fifo_register(&fifo, handle);
 }
 
-void thread_exit(int id)
-{
-  fifo_unregister(&fifo, handles[id]);
-}
+void thread_exit(int id) {}
 
 int test(int id)
 {

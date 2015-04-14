@@ -4,25 +4,24 @@
 #include "align.h"
 
 struct _fifo_node_t;
+struct _fifo_nodepair_t {
+  size_t index;
+  struct _fifo_node_t * node;
+};
 
 typedef struct DOUBLE_CACHE_ALIGNED {
   size_t enq DOUBLE_CACHE_ALIGNED;
   size_t deq DOUBLE_CACHE_ALIGNED;
-  struct {
-    volatile size_t index;
-    struct _fifo_node_t * node;
-  } head DOUBLE_CACHE_ALIGNED;
-  char lock;
+  volatile struct _fifo_nodepair_t head DOUBLE_CACHE_ALIGNED;
   size_t size;
   size_t nprocs;
-  struct _fifo_handle_t * plist;
 } fifo_t;
 
 typedef struct DOUBLE_CACHE_ALIGNED _fifo_handle_t {
-  struct _fifo_node_t * hazard;
+  struct _fifo_handle_t * next;
   struct _fifo_node_t * enq;
   struct _fifo_node_t * deq;
-  struct _fifo_handle_t * next;
+  struct _fifo_node_t * hazard;
   int winner;
 } fifo_handle_t;
 
