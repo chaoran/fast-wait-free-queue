@@ -20,7 +20,16 @@
   #define lock(p) spin_while(__sync_lock_test_and_set(p, 1))
   #define unlock(p) __sync_lock_release(p)
   #define mfence __sync_synchronize
-  #define compare_and_swap __sync_val_compare_and_swap
+  static inline
+  int _compare_and_swap(void * volatile * ptr, void ** cmp, void * val)
+  {
+    void * prev = *cmp;
+    void * curr = __sync_val_compare_and_swap(ptr, prev, val);
+    *cmp = curr;
+    return (prev == curr);
+  }
+  #define compare_and_swap(ptr, cmp, val) \
+    _compare_and_swap((void * volatile *) ptr, (void **) cmp, (void *) val)
   #define fetch_and_add __sync_fetch_and_add
   #define swap(ptr, val) ({ \
     __asm__("lwsync":::"memory"); \

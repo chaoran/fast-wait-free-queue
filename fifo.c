@@ -37,9 +37,10 @@ node_t * check(node_t ** pnode, node_t * volatile * phazard,
 
   if (phazard) {
     if (node->id < to->id) {
-      node_t * curr = compare_and_swap(pnode, node, to);
+      node_t * curr = node;
+      int succ = compare_and_swap(pnode, &curr, to);
       node_t * hazard = *phazard;
-      node = hazard ? hazard : (curr == node ? to : curr);
+      node = hazard ? hazard : (succ ? to : curr);
 
       if (node->id < to->id) {
         to = node;
@@ -61,7 +62,7 @@ void cleanup(fifo_t * fifo, node_t * head)
   int threshold = 2 * fifo->nprocs;
 
   if (index != -1 && head->id - index > threshold &&
-      index == compare_and_swap(&fifo->head.index, index, -1)) {
+      compare_and_swap(&fifo->head.index, &index, -1)) {
     node_t * curr = fifo->head.node;
     handle_t * p;
 
@@ -94,12 +95,12 @@ node_t * update(node_t * node, size_t to, size_t size, int * winner)
 
     if (!node) {
       node_t * next = new_node(i + 1, size);
-      node = compare_and_swap(&prev->next, NULL, next);
 
-      if (node) free(next);
-      else {
+      if (compare_and_swap(&prev->next, &node, next)) {
         node = next;
         *winner = 1;
+      } else {
+        free(next);
       }
     }
   }
@@ -191,10 +192,8 @@ void fifo_register(fifo_t * fifo, handle_t * me)
 
   handle_t * curr = fifo->plist;
 
-  do {
-    me->next = curr;
-    curr = compare_and_swap(&fifo->plist, curr, me);
-  } while (me->next != curr);
+  do me->next = curr;
+  while (!compare_and_swap(&fifo->plist, &curr, me));
 }
 
 void fifo_unregister(fifo_t * fifo, handle_t * me)

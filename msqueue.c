@@ -40,14 +40,14 @@ void msqueue_put(msqueue_t * q, hzdptr_t * hzd, void * data)
     }
 
     if (next != NULL) {
-      compare_and_swap(&q->tail, tail, next);
+      compare_and_swap(&q->tail, &tail, next);
       continue;
     }
 
-    if (NULL == compare_and_swap(&tail->next, NULL, node)) break;
+    if (compare_and_swap(&tail->next, &next, node)) break;
   }
 
-  compare_and_swap(&q->tail, tail, node);
+  compare_and_swap(&q->tail, &tail, node);
 }
 
 void * msqueue_get(msqueue_t * q, hzdptr_t * hzd)
@@ -72,12 +72,12 @@ void * msqueue_get(msqueue_t * q, hzdptr_t * hzd)
     }
 
     if (head == tail) {
-      compare_and_swap(&q->tail, tail, next);
+      compare_and_swap(&q->tail, &tail, next);
       continue;
     }
 
     data = next->data;
-    if (head == compare_and_swap(&q->head, head, next)) break;
+    if (compare_and_swap(&q->head, &head, next)) break;
   }
 
   hzdptr_retire(hzd, head);

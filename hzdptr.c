@@ -61,22 +61,21 @@ hzdptr_t * hzdptr_init(int nprocs, int nptrs)
   hzd->nretired = 0;
   memset(hzd->ptrs, 0, sizeof(void * [n]));
 
-  static hzdptr_t * volatile tail;
+  static hzdptr_t * volatile _tail;
+  hzdptr_t * tail = _tail;
 
   if (tail == NULL) {
     hzd->next = hzd;
 
-    if (NULL == compare_and_swap(&tail, NULL, hzd)) {
+    if (compare_and_swap(&_tail, &tail, hzd)) {
       return hzd;
     }
   }
 
   hzdptr_t * next = tail->next;
 
-  do {
-    hzd->next = next;
-    next = compare_and_swap(&tail->next, next, hzd);
-  } while (next != hzd->next);
+  do hzd->next = next;
+  while (compare_and_swap(&tail->next, &next, hzd));
 
   return hzd;
 }
