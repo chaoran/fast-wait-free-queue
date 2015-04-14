@@ -7,7 +7,7 @@
 
 typedef struct _ccsynch_node_t {
   struct _ccsynch_node_t * volatile next CACHE_ALIGNED;
-  void * data;
+  void * volatile data;
   int volatile status CACHE_ALIGNED;
 } ccsynch_node_t;
 
@@ -47,6 +47,7 @@ void ccsynch_apply(ccsynch_t * synch, ccsynch_handle_t * handle,
 
   if (status != CCSYNCH_DONE) {
     apply(state, data);
+
     curr = next;
     next = curr->next;
     acquire_fence();
@@ -58,6 +59,7 @@ void ccsynch_apply(ccsynch_t * synch, ccsynch_handle_t * handle,
       apply(state, curr->data);
       release_fence();
       curr->status = CCSYNCH_DONE;
+
       curr = next;
       next = curr->next;
       acquire_fence();
