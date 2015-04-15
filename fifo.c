@@ -27,6 +27,7 @@ node_t * new_node(size_t id, size_t size)
   memset(node, 0, size);
 
   node->id = id;
+  release_fence();
   return node;
 }
 
@@ -40,6 +41,7 @@ node_t * check(node_t ** pnode, node_t * volatile * phazard,
     if (node->id < to->id) {
       node_t * curr = node;
       int succ = compare_and_swap(pnode, &curr, to);
+      acquire_fence();
       node_t * hazard = *phazard;
       node = hazard ? hazard : (succ ? to : curr);
 
@@ -64,6 +66,7 @@ void cleanup(fifo_t * fifo, node_t * head, handle_t * handle)
 
   if (index != -1 && head->id - index > threshold &&
       compare_and_swap(&fifo->head.index, &index, -1)) {
+    acquire_fence();
     node_t * curr = fifo->head.node;
     handle_t * p;
 
