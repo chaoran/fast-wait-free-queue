@@ -51,6 +51,16 @@
 #else
 #error("Error: GCC is too old.")
 #endif
+#elif defined(__IBMC__)
+  #define spin_while(cond) while (cond) __asm__ ("nop")
+  #define fetch_and_add(ptr, val) \
+    __fetch_and_addlp((volatile long *) ptr, (long) val)
+  #define swap(ptr, val) \
+    (void *) __fetch_and_swaplp((volatile long *) ptr, (long) val)
+  #define acquire_fence() __isync()
+  #define release_fence() __lwsync()
+  #define compare_and_swap(ptr, cmp, val) \
+    __compare_and_swaplp((volatile long * ) ptr, (long *) cmp, (long) val)
 #else
 #error("Error: Non-GCC compiler is not supported yet.")
 #endif
