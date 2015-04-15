@@ -62,10 +62,12 @@ static inline
 void cleanup(fifo_t * fifo, node_t * head, handle_t * handle)
 {
   size_t  index = fifo->head.index;
-  int threshold = 2 * fifo->nprocs;
+  if (index == -1) return;
 
-  if (index != -1 && head->id - index > threshold &&
-      compare_and_swap(&fifo->head.index, &index, -1)) {
+  int threshold = 2 * fifo->nprocs;
+  if (head->id - index < threshold) return;
+
+  if (compare_and_swap(&fifo->head.index, &index, -1)) {
     acquire_fence();
     node_t * curr = fifo->head.node;
     handle_t * p;
@@ -89,27 +91,30 @@ void cleanup(fifo_t * fifo, node_t * head, handle_t * handle)
 }
 
 static inline
-node_t * update(node_t * node, size_t to, size_t size, int * winner)
+int locate(node_t ** pnode, size_t to, size_t size)
 {
-  size_t i;
+  int winner = 0;
+  node_t * node = *pnode;
 
+  long i;
   for (i = node->id; i < to; ++i) {
     node_t * prev = node;
     node = prev->next;
 
-    if (!node) {
-      node_t * next = new_node(i + 1, size);
+    if (node) continue;
 
-      if (compare_and_swap(&prev->next, &node, next)) {
-        node = next;
-        *winner = 1;
-      } else {
-        free(next);
-      }
+    node_t * next = new_node(i + 1, size);
+
+    if (compare_and_swap(&prev->next, &node, next)) {
+      node = next;
+      winner = 1;
+    } else {
+      free(next);
     }
   }
 
-  return node;
+  *pnode = node;
+  return winner;
 }
 
 void fifo_put(fifo_t * fifo, handle_t * handle, void * data)
@@ -122,7 +127,8 @@ void fifo_put(fifo_t * fifo, handle_t * handle, void * data)
   long li = i % s;
 
   if (node->id != ni) {
-    node = handle->enq = update(node, ni, s, &handle->winner);
+    handle->winner = locate(&handle->enq, ni, s);
+    node = handle->enq;
   }
 
   node->buffer[li].data = data;
@@ -139,7 +145,8 @@ void * fifo_get(fifo_t * fifo, handle_t * handle)
   long li = i % s;
 
   if (node->id != ni) {
-    node = handle->deq = update(node, ni, s, &handle->winner);
+    handle->winner = locate(&handle->deq, ni, s);
+    node = handle->deq;
   }
 
   void * val;
