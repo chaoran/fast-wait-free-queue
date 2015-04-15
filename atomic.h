@@ -4,9 +4,10 @@
 #if defined(__GNUC__)
 #if __GNUC__ >= 4 && __GNUC_MINOR__ >= 7
   #define compare_and_swap(ptr, expected, desired) \
-    __atomic_compare_exchange_n(ptr, expected, desired, 0, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)
-  #define fetch_and_add(ptr, val) __atomic_fetch_add(ptr, val, __ATOMIC_ACQ_REL)
-  #define swap(ptr, val) __atomic_exchange_n(ptr, val, __ATOMIC_ACQ_REL)
+    __atomic_compare_exchange_n(ptr, expected, desired, 0, \
+        __ATOMIC_RELAXED, __ATOMIC_RELAXED)
+  #define fetch_and_add(ptr, val) __atomic_fetch_add(ptr, val, __ATOMIC_RELAXED)
+  #define swap(ptr, val) __atomic_exchange_n(ptr, val, __ATOMIC_RELAXED)
   #define acquire_fence() __atomic_thread_fence(__ATOMIC_ACQUIRE)
   #define release_fence() __atomic_thread_fence(__ATOMIC_RELEASE)
   #if defined(__x86_64__) || defined(_M_X64_)
