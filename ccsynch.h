@@ -31,6 +31,8 @@ void ccsynch_apply(ccsynch_t * synch, ccsynch_handle_t * handle,
   next->next = NULL;
   next->status = CCSYNCH_WAIT;
 
+  release_fence();
+
   ccsynch_node_t * curr = swap(&synch->tail, next);
   handle->next = curr;
 
