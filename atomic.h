@@ -3,9 +3,6 @@
 
 #if defined(__GNUC__)
 #if __GNUC__ >= 4 && __GNUC_MINOR__ >= 7
-  #define lock(p) spin_while(__atomic_test_and_set(p, __ATOMIC_ACQUIRE))
-  #define unlock(p) __atomic_clear(p, __ATOMIC_RELEASE)
-  #define mfence() __atomic_thread_fence(__ATOMIC_SEQ_CST)
   #define compare_and_swap(ptr, expected, desired) \
     __atomic_compare_exchange_n(ptr, expected, desired, 0, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)
   #define fetch_and_add(ptr, val) __atomic_fetch_add(ptr, val, __ATOMIC_ACQ_REL)
@@ -18,9 +15,6 @@
     #define spin_while(cond) while (cond) __asm__("nop")
   #endif
 #elif __GNUC__ >= 4 && __GNUC_MINOR__ >= 1
-  #define lock(p) spin_while(__sync_lock_test_and_set(p, 1))
-  #define unlock(p) __sync_lock_release(p)
-  #define mfence __sync_synchronize
   static inline
   int _compare_and_swap(void * volatile * ptr, void ** cmp, void * val)
   {
