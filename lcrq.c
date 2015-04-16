@@ -22,13 +22,18 @@
 // hazard pointers implementation.
 //#define HAVE_HPTRS
 
-#define likely(x)       __builtin_expect(!!(x), 1)
-#define unlikely(x)     __builtin_expect(!!(x), 0)
+/*#define CASPTR(A, B, C) \*/
+  /*__sync_bool_compare_and_swap((long *)A, (long)B, (long)C)*/
+static inline int _CASPTR(volatile long * ptr, long * cmp, long val)
+{
+  long tmp = *cmp;
+  *cmp = __sync_val_compare_and_swap(ptr, tmp, val);
+  return (*cmp == tmp);
+}
+#define CASPTR(A, B, C) _CASPTR((volatile long *) A, (long *) B, (long) C)
 
-#define CASPTR(A, B, C) __sync_bool_compare_and_swap((long *)A, (long)B, (long)C)
 #define FAA64(A, B) __sync_fetch_and_add(A, B)
 #define CAS64(A, B, C) __sync_bool_compare_and_swap(A, B, C)
-#define StorePrefetch(A) __builtin_prefetch((const void *)A, 1, 3);
 
 #define __CAS2(ptr, o1, o2, n1, n2)                             \
   ({                                                              \
@@ -43,19 +48,7 @@
      : "b"(__new1), "c"(__new2),                  \
      "a"(__old1), "d"(__old2));                 \
    __ret; })
-
-#ifdef DEBUG
-#define CAS2(ptr, o1, o2, n1, n2)                               \
-  ({                                                              \
-   int res;                                                    \
-   res = __CAS2(ptr, o1, o2, n1, n2);                          \
-   __executed_cas[__stats_thread_id].v++;                      \
-   __failed_cas[__stats_thread_id].v += 1 - res;               \
-   res;                                                        \
-   })
-#else
 #define CAS2(ptr, o1, o2, n1, n2)    __CAS2(ptr, o1, o2, n1, n2)
-#endif
 
 
 #define BIT_TEST_AND_SET(ptr, b)                                \
@@ -161,7 +154,7 @@ inline void fixState(RingQueue *rq) {
     uint64_t t = FAA64(&rq->tail, 0);
     uint64_t h = FAA64(&rq->head, 0);
 
-    if (unlikely(rq->tail != t))
+    if (rq->tail != t)
       continue;
 
     if (h > t) {
@@ -211,14 +204,14 @@ static void lcrq_put(uint64_t arg) {
 
 #ifdef HAVE_HPTRS
     SWAP(&hazardptr, rq);
-    if (unlikely(tail != rq))
+    if (tail != rq)
       continue;
 #endif
 
     RingQueue *next = rq->next;
 
-    if (unlikely(next != NULL)) {
-      CASPTR(&tail, rq, next);
+    if (next != NULL) {
+      CASPTR(&tail, &rq, next);
       continue;
     }
 
@@ -234,8 +227,8 @@ alloc:
       // Solo enqueue
       nrq->tail = 1, nrq->array[0].val = (uint64_t) arg, nrq->array[0].idx = 0;
 
-      if (CASPTR(&rq->next, NULL, nrq)) {
-        CASPTR(&tail, rq, nrq);
+      if (CASPTR(&rq->next, &next, nrq)) {
+        CASPTR(&tail, &rq, nrq);
         nrq = NULL;
         return;
       }
@@ -243,14 +236,13 @@ alloc:
     }
 
     RingNode* cell = &rq->array[t & (RING_SIZE-1)];
-    StorePrefetch(cell);
 
     uint64_t idx = cell->idx;
     uint64_t val = cell->val;
 
-    if (likely(is_empty(val))) {
-      if (likely(node_index(idx) <= t)) {
-        if ((likely(!node_unsafe(idx)) || rq->head < t) &&
+    if (is_empty(val)) {
+      if (node_index(idx) <= t) {
+        if ((!node_unsafe(idx) || rq->head < t) &&
             CAS2((uint64_t*)cell, -1, idx, arg, t)) {
           return;
         }
@@ -259,7 +251,7 @@ alloc:
 
     uint64_t h = rq->head;
 
-    if (unlikely((int64_t)(t - h) >= (int64_t)RING_SIZE) &&
+    if ((int64_t)(t - h) >= (int64_t)RING_SIZE &&
         close_crq(rq, t, ++try_close)) {
       count_closed_crq();
       goto alloc;
@@ -274,14 +266,13 @@ static uint64_t lcrq_get() {
 
 #ifdef HAVE_HPTRS
     SWAP(&hazardptr, rq);
-    if (unlikely(head != rq))
+    if (head != rq)
       continue;
 #endif
 
     uint64_t h = FAA64(&rq->head, 1);
 
     RingNode* cell = &rq->array[h & (RING_SIZE-1)];
-    StorePrefetch(cell);
 
     uint64_t tt;
     int r = 0;
@@ -293,10 +284,10 @@ static uint64_t lcrq_get() {
       uint64_t idx = node_index(cell_idx);
       uint64_t val = cell->val;
 
-      if (unlikely(idx > h)) break;
+      if (idx > h) break;
 
-      if (likely(!is_empty(val))) {
-        if (likely(idx == h)) {
+      if (!is_empty(val)) {
+        if (idx == h) {
           if (CAS2((uint64_t*)cell, val, cell_idx, -1, unsafe | h + RING_SIZE))
             return val;
         } else {
@@ -313,7 +304,7 @@ static uint64_t lcrq_get() {
         int crq_closed = crq_is_closed(tt);
         uint64_t t = tail_index(tt);
 
-        if (unlikely(unsafe)) { // Nothing to do, move along
+        if (unsafe) { // Nothing to do, move along
           if (CAS2((uint64_t*)cell, val, cell_idx, val, unsafe | h + RING_SIZE))
             break;
         } else if (t < h + 1 || r > 200000 || crq_closed) {
@@ -335,7 +326,7 @@ static uint64_t lcrq_get() {
       if (next == NULL)
         return -1;  // EMPTY
       if (tail_index(rq->tail) <= h + 1)
-        CASPTR(&head, rq, next);
+        CASPTR(&head, &rq, next);
     }
   }
 }
