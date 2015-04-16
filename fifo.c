@@ -155,13 +155,13 @@ void * fifo_get(fifo_t * fifo, handle_t * handle)
 
   void * val;
   spin_while(NULL == (val = node->buffer[li].data));
+  handle->hazard = NULL;
 
   if (handle->winner) {
     cleanup(fifo, node, handle);
     handle->winner = 0;
   }
 
-  handle->hazard = NULL;
   return val;
 }
 
