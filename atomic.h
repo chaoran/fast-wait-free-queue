@@ -86,6 +86,30 @@ void * swap(volatile void * ptr, void * val)
 
 #if defined(__x86_64__) || defined(_M_X64_)
 #define spin_while(cond) while (cond) __asm__("pause")
+
+static inline
+int _atomic_dcas(volatile long * ptr, long * cmp1, long * cmp2,
+    long val1, long val2)
+{
+  char success;
+  long tmp1 = *cmp1;
+  long tmp2 = *cmp2;
+
+  __asm__ __volatile__(
+      "lock cmpxchg16b %1\n"
+      "setz %0"
+      : "=q" (success), "+m" (*ptr), "+a" (tmp1), "+d" (tmp2)
+      : "b" (val1), "c" (val2)
+      : "cc" );
+
+  *cmp1 = tmp1;
+  *cmp2 = tmp2;
+  return success;
+}
+#define atomic_dcas(p, o1, o2, n1, n2) \
+  _atomic_dcas((volatile long *) p, \
+      (long *) o1, (long *) o2, (long) n1, (long) n2)
+
 #else
 #define spin_while(cond) while (cond) __asm__("nop")
 #endif
