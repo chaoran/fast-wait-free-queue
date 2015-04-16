@@ -1,5 +1,7 @@
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
+#include "align.h"
 #include "atomic.h"
 
 // Definition: RING_POW
@@ -137,8 +139,10 @@ inline void fixState(RingQueue *rq) {
   }
 }
 
-__thread RingQueue *nrq;
-__thread RingQueue *hazardptr;
+typedef struct _lcrq_handle_t {
+  RingQueue * next;
+  char padding[2 * CACHE_LINE_SIZE - sizeof(RingQueue *)];
+} lcrq_handle_t;
 
 inline int close_crq(RingQueue *rq, const uint64_t t, const int tries) {
   uint64_t tt = t + 1;
@@ -149,7 +153,7 @@ inline int close_crq(RingQueue *rq, const uint64_t t, const int tries) {
     return BIT_TEST_AND_SET(&rq->tail, 63);
 }
 
-static void lcrq_put(lcrq_t * q, uint64_t arg) {
+static void lcrq_put(lcrq_t * q, lcrq_handle_t * handle, uint64_t arg) {
   int try_close = 0;
 
   while (1) {
@@ -171,7 +175,10 @@ static void lcrq_put(lcrq_t * q, uint64_t arg) {
     uint64_t t = fetch_and_add(&rq->tail, 1);
 
     if (crq_is_closed(t)) {
+      RingQueue * nrq;
 alloc:
+      nrq = handle->next;
+
       if (nrq == NULL) {
         nrq = malloc(sizeof(RingQueue));
         init_ring(nrq);
@@ -184,7 +191,7 @@ alloc:
 
       if (compare_and_swap(&rq->next, &next, nrq)) {
         compare_and_swap(&q->tail, &rq, nrq);
-        nrq = NULL;
+        handle->next = NULL;
         return;
       }
       continue;
@@ -289,10 +296,13 @@ static uint64_t lcrq_get(lcrq_t * q) {
 
 static lcrq_t queue;
 static int n = 10000000;
+static lcrq_handle_t * handles;
 
 int init(int nprocs)
 {
   lcrq_init(&queue);
+  handles = malloc(sizeof(lcrq_handle_t [nprocs]));
+  memset(handles, 0, sizeof(lcrq_handle_t [nprocs]));
   n /= nprocs;
   return n;
 }
@@ -303,7 +313,7 @@ int test(int id)
   int i;
 
   for (i = 0; i < n; ++i) {
-    lcrq_put(&queue, val);
+    lcrq_put(&queue, &handles[id], val);
 
     do val = lcrq_get(&queue);
     while (val == (uint64_t) -1);
