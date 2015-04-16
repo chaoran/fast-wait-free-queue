@@ -101,8 +101,8 @@ inline void fixState(RingQueue *rq) {
   uint64_t t, h, n;
 
   while (1) {
-    uint64_t t = fetch_and_add(&rq->tail, 0);
-    uint64_t h = fetch_and_add(&rq->head, 0);
+    uint64_t t = rq->tail;
+    uint64_t h = rq->head;
 
     if (rq->tail != t)
       continue;
