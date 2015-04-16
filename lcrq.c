@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <stdlib.h>
+#include "atomic.h"
 
 // Definition: RING_POW
 // --------------------
@@ -9,31 +10,12 @@
 #endif
 #define RING_SIZE       (1ull << RING_POW)
 
-// Definition: RING_STATS
-// --------------------
-// Define to collect statistics about CRQ closes and nodes
-// marked unsafe.
-//#define RING_STATS
-
 // Definition: HAVE_HPTRS
 // --------------------
 // Define to enable hazard pointer setting for safe memory
 // reclamation.  You'll need to integrate this with your
 // hazard pointers implementation.
 //#define HAVE_HPTRS
-
-/*#define CASPTR(A, B, C) \*/
-  /*__sync_bool_compare_and_swap((long *)A, (long)B, (long)C)*/
-static inline int _CASPTR(volatile long * ptr, long * cmp, long val)
-{
-  long tmp = *cmp;
-  *cmp = __sync_val_compare_and_swap(ptr, tmp, val);
-  return (*cmp == tmp);
-}
-#define CASPTR(A, B, C) _CASPTR((volatile long *) A, (long *) B, (long) C)
-
-#define FAA64(A, B) __sync_fetch_and_add(A, B)
-#define CAS64(A, B, C) __sync_bool_compare_and_swap(A, B, C)
 
 #define __CAS2(ptr, o1, o2, n1, n2)                             \
   ({                                                              \
@@ -151,14 +133,14 @@ inline void fixState(RingQueue *rq) {
   uint64_t t, h, n;
 
   while (1) {
-    uint64_t t = FAA64(&rq->tail, 0);
-    uint64_t h = FAA64(&rq->head, 0);
+    uint64_t t = fetch_and_add(&rq->tail, 0);
+    uint64_t h = fetch_and_add(&rq->head, 0);
 
     if (rq->tail != t)
       continue;
 
     if (h > t) {
-      if (CAS64(&rq->tail, t, h)) break;
+      if (compare_and_swap(&rq->tail, &t, h)) break;
       continue;
     }
     break;
@@ -168,30 +150,11 @@ inline void fixState(RingQueue *rq) {
 __thread RingQueue *nrq;
 __thread RingQueue *hazardptr;
 
-#ifdef RING_STATS
-__thread uint64_t mycloses;
-__thread uint64_t myunsafes;
-
-uint64_t closes;
-uint64_t unsafes;
-
-inline void count_closed_crq(void) {
-  mycloses++;
-}
-
-
-inline void count_unsafe_node(void) {
-  myunsafes++;
-}
-#else
-inline void count_closed_crq(void) { }
-inline void count_unsafe_node(void) { }
-#endif
-
-
 inline int close_crq(RingQueue *rq, const uint64_t t, const int tries) {
+  uint64_t tt = t + 1;
+
   if (tries < 10)
-    return CAS64(&rq->tail, t + 1, (t + 1)|(1ull<<63));
+    return compare_and_swap(&rq->tail, &tt, tt|(1ull<<63));
   else
     return BIT_TEST_AND_SET(&rq->tail, 63);
 }
@@ -211,11 +174,11 @@ static void lcrq_put(uint64_t arg) {
     RingQueue *next = rq->next;
 
     if (next != NULL) {
-      CASPTR(&tail, &rq, next);
+      compare_and_swap(&tail, &rq, next);
       continue;
     }
 
-    uint64_t t = FAA64(&rq->tail, 1);
+    uint64_t t = fetch_and_add(&rq->tail, 1);
 
     if (crq_is_closed(t)) {
 alloc:
@@ -225,10 +188,12 @@ alloc:
       }
 
       // Solo enqueue
-      nrq->tail = 1, nrq->array[0].val = (uint64_t) arg, nrq->array[0].idx = 0;
+      nrq->tail = 1;
+      nrq->array[0].val = (uint64_t) arg;
+      nrq->array[0].idx = 0;
 
-      if (CASPTR(&rq->next, &next, nrq)) {
-        CASPTR(&tail, &rq, nrq);
+      if (compare_and_swap(&rq->next, &next, nrq)) {
+        compare_and_swap(&tail, &rq, nrq);
         nrq = NULL;
         return;
       }
@@ -253,7 +218,6 @@ alloc:
 
     if ((int64_t)(t - h) >= (int64_t)RING_SIZE &&
         close_crq(rq, t, ++try_close)) {
-      count_closed_crq();
       goto alloc;
     }
   }
@@ -270,7 +234,7 @@ static uint64_t lcrq_get() {
       continue;
 #endif
 
-    uint64_t h = FAA64(&rq->head, 1);
+    uint64_t h = fetch_and_add(&rq->head, 1);
 
     RingNode* cell = &rq->array[h & (RING_SIZE-1)];
 
@@ -292,7 +256,6 @@ static uint64_t lcrq_get() {
             return val;
         } else {
           if (CAS2((uint64_t*)cell, val, cell_idx, val, set_unsafe(idx))) {
-            count_unsafe_node();
             break;
           }
         }
@@ -326,7 +289,7 @@ static uint64_t lcrq_get() {
       if (next == NULL)
         return -1;  // EMPTY
       if (tail_index(rq->tail) <= h + 1)
-        CASPTR(&head, &rq, next);
+        compare_and_swap(&head, &rq, next);
     }
   }
 }
