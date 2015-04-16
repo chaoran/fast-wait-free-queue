@@ -19,14 +19,6 @@
 // hazard pointers implementation.
 //#define HAVE_HPTRS
 
-#define BIT_TEST_AND_SET(ptr, b)                                \
-  ({                                                              \
-   char __ret;                                                 \
-   asm volatile("lock btsq $63, %0; setnc %1" : "+m"(*ptr), "=a"(__ret) : : "cc"); \
-   __ret;                                                      \
-   })
-
-
 inline int is_empty(uint64_t v) __attribute__ ((pure));
 inline uint64_t node_index(uint64_t i) __attribute__ ((pure));
 inline uint64_t set_unsafe(uint64_t i) __attribute__ ((pure));
@@ -134,7 +126,7 @@ inline int close_crq(RingQueue *rq, const uint64_t t, const int tries) {
   if (tries < 10)
     return compare_and_swap(&rq->tail, &tt, tt|(1ull<<63));
   else
-    return BIT_TEST_AND_SET(&rq->tail, 63);
+    return atomic_btas(&rq->tail, 63);
 }
 
 static void lcrq_put(lcrq_t * q, lcrq_handle_t * handle, uint64_t arg) {
@@ -254,7 +246,7 @@ static uint64_t lcrq_get(lcrq_t * q) {
         } else if (t < h + 1 || r > 200000 || crq_closed) {
           if (atomic_dcas(cell, &val, &idx, val, h + RING_SIZE)) {
             if (r > 200000 && tt > RING_SIZE)
-              BIT_TEST_AND_SET(&rq->tail, 63);
+              atomic_btas(&rq->tail, 63);
             break;
           }
         } else {
