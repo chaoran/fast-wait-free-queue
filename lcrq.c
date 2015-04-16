@@ -61,8 +61,10 @@ typedef struct RingQueue {
   RingNode array[RING_SIZE];
 } RingQueue __attribute__ ((aligned (128)));
 
-RingQueue *head;
-RingQueue *tail;
+typedef struct _lcrq_t {
+  RingQueue * volatile head;
+  RingQueue * volatile tail;
+} lcrq_t;
 
 inline void init_ring(RingQueue *r) {
   int i;
@@ -75,9 +77,6 @@ inline void init_ring(RingQueue *r) {
   r->head = r->tail = 0;
   r->next = NULL;
 }
-
-int FULL;
-
 
 inline int is_empty(uint64_t v)  {
   return (v == (uint64_t)-1);
@@ -108,25 +107,16 @@ inline int crq_is_closed(uint64_t t) {
   return (t & (1ull << 63)) != 0;
 }
 
-
-static void SHARED_OBJECT_INIT() {
+void lcrq_init(lcrq_t * q)
+{
   int i;
 
   RingQueue *rq = malloc(sizeof(RingQueue));
   init_ring(rq);
-  head = tail = rq;
 
-  if (FULL) {
-    // fill ring 
-    for (i = 0; i < RING_SIZE/2; i++) {
-      rq->array[i].val = 0;
-      rq->array[i].idx = i;
-      rq->tail++;
-    }
-    FULL = 0;
-  }
+  q->head = rq;
+  q->tail = rq;
 }
-
 
 inline void fixState(RingQueue *rq) {
 
@@ -159,22 +149,22 @@ inline int close_crq(RingQueue *rq, const uint64_t t, const int tries) {
     return BIT_TEST_AND_SET(&rq->tail, 63);
 }
 
-static void lcrq_put(uint64_t arg) {
+static void lcrq_put(lcrq_t * q, uint64_t arg) {
   int try_close = 0;
 
   while (1) {
-    RingQueue *rq = tail;
+    RingQueue *rq = q->tail;
 
 #ifdef HAVE_HPTRS
     SWAP(&hazardptr, rq);
-    if (tail != rq)
+    if (q->tail != rq)
       continue;
 #endif
 
     RingQueue *next = rq->next;
 
     if (next != NULL) {
-      compare_and_swap(&tail, &rq, next);
+      compare_and_swap(&q->tail, &rq, next);
       continue;
     }
 
@@ -193,7 +183,7 @@ alloc:
       nrq->array[0].idx = 0;
 
       if (compare_and_swap(&rq->next, &next, nrq)) {
-        compare_and_swap(&tail, &rq, nrq);
+        compare_and_swap(&q->tail, &rq, nrq);
         nrq = NULL;
         return;
       }
@@ -223,9 +213,9 @@ alloc:
   }
 }
 
-static uint64_t lcrq_get() {
+static uint64_t lcrq_get(lcrq_t * q) {
   while (1) {
-    RingQueue *rq = head;
+    RingQueue *rq = q->head;
     RingQueue *next;
 
 #ifdef HAVE_HPTRS
@@ -289,7 +279,7 @@ static uint64_t lcrq_get() {
       if (next == NULL)
         return -1;  // EMPTY
       if (tail_index(rq->tail) <= h + 1)
-        compare_and_swap(&head, &rq, next);
+        compare_and_swap(&q->head, &rq, next);
     }
   }
 }
@@ -297,11 +287,12 @@ static uint64_t lcrq_get() {
 #ifdef BENCHMARK
 #include <stdint.h>
 
+static lcrq_t queue;
 static int n = 10000000;
 
 int init(int nprocs)
 {
-  SHARED_OBJECT_INIT();
+  lcrq_init(&queue);
   n /= nprocs;
   return n;
 }
@@ -312,8 +303,10 @@ int test(int id)
   int i;
 
   for (i = 0; i < n; ++i) {
-    lcrq_put(val);
-    while ((val = lcrq_get()) == (uint64_t) -1);
+    lcrq_put(&queue, val);
+
+    do val = lcrq_get(&queue);
+    while (val == (uint64_t) -1);
   }
 
   return (int) val;
