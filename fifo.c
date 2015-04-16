@@ -122,6 +122,8 @@ void fifo_put(fifo_t * fifo, handle_t * handle, void * data)
   node_t * node = _hzdptr_setv(&handle->enq, &handle->hazard);
 
   long i  = fetch_and_add(&fifo->enq, 1);
+  acquire_fence();
+
   long s  = fifo->size;
   long ni = i / s;
   long li = i % s;
@@ -140,6 +142,8 @@ void * fifo_get(fifo_t * fifo, handle_t * handle)
   node_t * node = _hzdptr_setv(&handle->deq, &handle->hazard);
 
   long i  = fetch_and_add(&fifo->deq, 1);
+  acquire_fence();
+
   long s  = fifo->size;
   long ni = i / s;
   long li = i % s;
