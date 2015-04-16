@@ -110,6 +110,22 @@ int _atomic_dcas(volatile long * ptr, long * cmp1, long * cmp2,
   _atomic_dcas((volatile long *) p, \
       (long *) o1, (long *) o2, (long) n1, (long) n2)
 
+static inline
+int _atomic_btas(volatile long * ptr, char bit)
+{
+  char success;
+
+  __asm__ __volatile__(
+      "lock btsq %2, %0\n"
+      "setnc %1"
+      : "+m" (*ptr), "=r" (success)
+      : "ri" (bit)
+      : "cc" );
+
+  return success;
+}
+#define atomic_btas(ptr, bit) _atomic_btas((volatile long *) ptr, bit)
+
 #else
 #define spin_while(cond) while (cond) __asm__("nop")
 #endif
