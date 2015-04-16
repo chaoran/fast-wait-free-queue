@@ -19,22 +19,6 @@
 // hazard pointers implementation.
 //#define HAVE_HPTRS
 
-#define __CAS2(ptr, o1, o2, n1, n2)                             \
-  ({                                                              \
-   char __ret;                                                 \
-   __typeof__(o2) __junk;                                      \
-   __typeof__(*(ptr)) __old1 = (o1);                           \
-   __typeof__(o2) __old2 = (o2);                               \
-   __typeof__(*(ptr)) __new1 = (n1);                           \
-   __typeof__(o2) __new2 = (n2);                               \
-   asm volatile("lock cmpxchg16b %2;setz %1"                   \
-     : "=d"(__junk), "=a"(__ret), "+m" (*ptr)     \
-     : "b"(__new1), "c"(__new2),                  \
-     "a"(__old1), "d"(__old2));                 \
-   __ret; })
-#define CAS2(ptr, o1, o2, n1, n2)    __CAS2(ptr, o1, o2, n1, n2)
-
-
 #define BIT_TEST_AND_SET(ptr, b)                                \
   ({                                                              \
    char __ret;                                                 \
@@ -205,7 +189,7 @@ alloc:
     if (is_empty(val)) {
       if (node_index(idx) <= t) {
         if ((!node_unsafe(idx) || rq->head < t) &&
-            CAS2((uint64_t*)cell, -1, idx, arg, t)) {
+            atomic_dcas(cell, &val, &idx, arg, t)) {
           return;
         }
       }
@@ -249,10 +233,10 @@ static uint64_t lcrq_get(lcrq_t * q) {
 
       if (!is_empty(val)) {
         if (idx == h) {
-          if (CAS2((uint64_t*)cell, val, cell_idx, -1, unsafe | h + RING_SIZE))
+          if (atomic_dcas(cell, &val, &cell_idx, -1, unsafe | h + RING_SIZE))
             return val;
         } else {
-          if (CAS2((uint64_t*)cell, val, cell_idx, val, set_unsafe(idx))) {
+          if (atomic_dcas(cell, &val, &cell_idx, val, set_unsafe(idx))) {
             break;
           }
         }
@@ -265,10 +249,10 @@ static uint64_t lcrq_get(lcrq_t * q) {
         uint64_t t = tail_index(tt);
 
         if (unsafe) { // Nothing to do, move along
-          if (CAS2((uint64_t*)cell, val, cell_idx, val, unsafe | h + RING_SIZE))
+          if (atomic_dcas(cell, &val, &cell_idx, val, unsafe | h + RING_SIZE))
             break;
         } else if (t < h + 1 || r > 200000 || crq_closed) {
-          if (CAS2((uint64_t*)cell, val, idx, val, h + RING_SIZE)) {
+          if (atomic_dcas(cell, &val, &idx, val, h + RING_SIZE)) {
             if (r > 200000 && tt > RING_SIZE)
               BIT_TEST_AND_SET(&rq->tail, 63);
             break;
