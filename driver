@@ -45,7 +45,7 @@ while true; do
   printf '#%-2d %.2f %.2f %.4f %.2f %.2f %.2f\n' \
     $N $TIME $MEAN $STD $ERR $PRECISION
 
-  if (($N >= 30 || ($N > 5 && $(bc <<< "$PRECISION < 0.02") == 1))); then
+  if (($N >= 30 || $N > 5 && $(echo "$PRECISION < 0.02" | bc) == 1)); then
     break
   else
     i=$N
