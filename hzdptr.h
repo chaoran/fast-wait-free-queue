@@ -89,7 +89,7 @@ static void _hzdptr_enlist(hzdptr_t * hzd)
   hzdptr_t * next = tail->next;
 
   do hzd->next = next;
-  while (compare_and_swap(&tail->next, &next, hzd));
+  while (!compare_and_swap(&tail->next, &next, hzd));
 }
 
 #endif /* end of include guard: HZDPTR_H */
