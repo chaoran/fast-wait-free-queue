@@ -19,9 +19,9 @@ typedef struct _fifo_node_t {
 typedef fifo_handle_t handle_t;
 
 static inline
-node_t * new_node(size_t id, size_t size)
+node_t * new_node(size_t id)
 {
-  size = sizeof(node_t) + sizeof(cache_t [size]);
+  const static size_t size = sizeof(node_t) + sizeof(cache_t [FIFO_NODE_SIZE]);
 
   node_t * node = align_malloc(size, PAGE_SIZE);
   memset(node, 0, size);
@@ -98,7 +98,7 @@ void cleanup(fifo_t * fifo, node_t * head, handle_t * handle)
 }
 
 static inline
-node_t * locate(node_t * node, size_t to, size_t size, handle_t * handle)
+node_t * locate(node_t * node, size_t to, handle_t * handle)
 {
   size_t i;
   for (i = node->id; i < to; ++i) {
@@ -115,7 +115,7 @@ node_t * locate(node_t * node, size_t to, size_t size, handle_t * handle)
       next->id = i + 1;
       release_fence();
     } else {
-      next = new_node(i + 1, size);
+      next = new_node(i + 1);
     }
 
     if (compare_and_swap(&prev->next, &node, next)) {
@@ -137,12 +137,11 @@ void fifo_put(fifo_t * fifo, handle_t * handle, void * data)
   size_t i  = fetch_and_add(&fifo->enq, 1);
   acquire_fence();
 
-  size_t s  = fifo->size;
-  size_t ni = i / s;
-  size_t li = i % s;
+  size_t ni = i / FIFO_NODE_SIZE;
+  size_t li = i % FIFO_NODE_SIZE;
 
   if (node->id != ni) {
-    node = handle->enq = locate(node, ni, s, handle);
+    node = handle->enq = locate(node, ni, handle);
   }
 
   node->buffer[li].data = data;
@@ -156,12 +155,11 @@ void * fifo_get(fifo_t * fifo, handle_t * handle)
   size_t i  = fetch_and_add(&fifo->deq, 1);
   acquire_fence();
 
-  size_t s  = fifo->size;
-  size_t ni = i / s;
-  size_t li = i % s;
+  size_t ni = i / FIFO_NODE_SIZE;
+  size_t li = i % FIFO_NODE_SIZE;
 
   if (node->id != ni) {
-    node = handle->deq = locate(node, ni, s, handle);
+    node = handle->deq = locate(node, ni, handle);
   }
 
   void * val;
@@ -177,13 +175,12 @@ void * fifo_get(fifo_t * fifo, handle_t * handle)
   return val;
 }
 
-void fifo_init(fifo_t * fifo, size_t size, size_t width)
+void fifo_init(fifo_t * fifo, size_t width)
 {
-  fifo->size = size;
   fifo->nprocs = width;
 
   fifo->head.index = 0;
-  fifo->head.node = new_node(0, size);
+  fifo->head.node = new_node(0);
 
   fifo->enq = 0;
   fifo->deq = 0;
@@ -195,7 +192,7 @@ void fifo_register(fifo_t * fifo, handle_t * me)
   me->deq = fifo->head.node;
   me->hazard = NULL;
   me->winner = 0;
-  me->retired = new_node(0, fifo->size);
+  me->retired = new_node(0);
 
   _hzdptr_enlist((hzdptr_t *) me);
 }
@@ -209,7 +206,7 @@ static int n = 10000000;
 
 int init(int nprocs)
 {
-  fifo_init(&fifo, 510, nprocs);
+  fifo_init(&fifo, nprocs);
   handles = malloc(sizeof(fifo_handle_t * [nprocs]));
 
   n /= nprocs;
