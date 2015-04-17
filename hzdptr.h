@@ -14,7 +14,7 @@ typedef struct _hzdptr_t {
 #define HZDPTR_THRESHOLD(nprocs) (2 * nprocs)
 
 extern void hzdptr_init(hzdptr_t * hzd, int nprocs, int nptrs);
-extern void _hzdptr_retire(hzdptr_t * hzd, void ** rlist);
+void * _hzdptr_retire(hzdptr_t * hzd, void ** rlist, void * retired);
 
 static inline
 int hzdptr_size(int nprocs, int nptrs)
@@ -66,13 +66,13 @@ void * hzdptr_setv(void volatile * ptr, hzdptr_t * hzd, int idx)
 }
 
 static inline
-void hzdptr_retire(hzdptr_t * hzd, void * ptr)
+void hzdptr_retire(hzdptr_t * hzd, void * ptr, void ** freelist)
 {
   void ** rlist = &hzd->ptrs[hzd->nptrs];
   rlist[hzd->nretired++] = ptr;
 
   if (hzd->nretired == HZDPTR_THRESHOLD(hzd->nprocs)) {
-    _hzdptr_retire(hzd, rlist);
+    *freelist = _hzdptr_retire(hzd, rlist, *freelist);
   }
 }
 

@@ -4,14 +4,19 @@
 #include "hzdptr.h"
 
 typedef struct _node_t {
-  void * data DOUBLE_CACHE_ALIGNED;
   struct _node_t * volatile next;
+  void * data DOUBLE_CACHE_ALIGNED;
 } node_t;
 
 typedef struct _msqueue_t {
   struct _node_t * volatile head DOUBLE_CACHE_ALIGNED;
   struct _node_t * volatile tail DOUBLE_CACHE_ALIGNED;
 } msqueue_t;
+
+typedef struct _handle_t {
+  struct _node_t * next;
+  hzdptr_t hzd;
+} handle_t;
 
 void msqueue_init(msqueue_t * q)
 {
@@ -22,9 +27,16 @@ void msqueue_init(msqueue_t * q)
   q->tail = node;
 }
 
-void msqueue_put(msqueue_t * q, hzdptr_t * hzd, void * data)
+void msqueue_put(msqueue_t * q, handle_t * handle, void * data)
 {
-  node_t * node = align_malloc(sizeof(node_t), CACHE_LINE_SIZE);
+  node_t * node = handle->next;
+
+  if (node) {
+    handle->next = node->next;
+  } else {
+    node = align_malloc(sizeof(node_t), CACHE_LINE_SIZE);
+  }
+
   node->data = data;
   node->next = NULL;
 
@@ -32,7 +44,7 @@ void msqueue_put(msqueue_t * q, hzdptr_t * hzd, void * data)
   node_t * next;
 
   while (1) {
-    tail = hzdptr_setv(&q->tail, hzd, 0);
+    tail = hzdptr_setv(&q->tail, &handle->hzd, 0);
     next = tail->next;
 
     if (tail != q->tail) {
@@ -50,7 +62,7 @@ void msqueue_put(msqueue_t * q, hzdptr_t * hzd, void * data)
   compare_and_swap(&q->tail, &tail, node);
 }
 
-void * msqueue_get(msqueue_t * q, hzdptr_t * hzd)
+void * msqueue_get(msqueue_t * q, handle_t * handle)
 {
   void * data;
 
@@ -59,9 +71,9 @@ void * msqueue_get(msqueue_t * q, hzdptr_t * hzd)
   node_t * next;
 
   while (1) {
-    head = hzdptr_setv(&q->head, hzd, 0);
+    head = hzdptr_setv(&q->head, &handle->hzd, 0);
     tail = q->tail;
-    next = hzdptr_set(&head->next, hzd, 1);
+    next = hzdptr_set(&head->next, &handle->hzd, 1);
 
     if (head != q->head) {
       continue;
@@ -80,7 +92,7 @@ void * msqueue_get(msqueue_t * q, hzdptr_t * hzd)
     if (compare_and_swap(&q->head, &head, next)) break;
   }
 
-  hzdptr_retire(hzd, head);
+  hzdptr_retire(&handle->hzd, head, (void **) &handle->next);
   return data;
 }
 
@@ -89,21 +101,22 @@ void * msqueue_get(msqueue_t * q, hzdptr_t * hzd)
 
 static msqueue_t msqueue;
 static int n = 10000000;
-static hzdptr_t ** hzdptrs;
+static handle_t ** handles;
 static int _nprocs;
 
 int init(int nprocs)
 {
   _nprocs = nprocs;
   msqueue_init(&msqueue);
-  hzdptrs = malloc(sizeof(hzdptr_t * [nprocs]));
+  handles = malloc(sizeof(handle_t * [nprocs]));
   n /= nprocs;
   return n;
 }
 
 void thread_init(int id) {
-  hzdptrs[id] = malloc(sizeof(hzdptr_t) + hzdptr_size(_nprocs, 2));
-  hzdptr_init(hzdptrs[id], _nprocs, 2);
+  handles[id] = malloc(sizeof(handle_t) + hzdptr_size(_nprocs, 2));
+  hzdptr_init(&handles[id]->hzd, _nprocs, 2);
+  handles[id]->next = NULL;
 };
 
 void thread_exit(int id, void * local) {};
@@ -114,9 +127,9 @@ int test(int id)
   int i;
 
   for (i = 0; i < n; ++i) {
-    msqueue_put(&msqueue, hzdptrs[id], val);
+    msqueue_put(&msqueue, handles[id], val);
 
-    do val = msqueue_get(&msqueue, hzdptrs[id]);
+    do val = msqueue_get(&msqueue, handles[id]);
     while (val == (void *) -1);
   }
 

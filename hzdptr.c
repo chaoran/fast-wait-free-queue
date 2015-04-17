@@ -5,6 +5,10 @@
 
 #define HZDPTR_HTBL_SIZE(nprocs, nptrs) (4 * nprocs * nptrs)
 
+typedef struct _node_t {
+  struct _node_t * next;
+} node_t;
+
 static int htable_insert(void ** tbl, size_t size, void * ptr)
 {
   int index = XXH32(ptr, 1, 0) % size;
@@ -63,7 +67,7 @@ void hzdptr_init(hzdptr_t * hzd, int nprocs, int nptrs)
   _hzdptr_enlist(hzd);
 }
 
-void _hzdptr_retire(hzdptr_t * hzd, void ** rlist)
+void * _hzdptr_retire(hzdptr_t * hzd, void ** rlist, void * retired)
 {
   size_t size = HZDPTR_HTBL_SIZE(hzd->nprocs, hzd->nptrs);
   void * plist[size];
@@ -93,10 +97,13 @@ void _hzdptr_retire(hzdptr_t * hzd, void ** rlist)
     if (htable_lookup(plist, size, ptr)) {
       rlist[nretired++] = ptr;
     } else {
-      free(ptr);
+      node_t * node = (node_t *) ptr;
+      node->next = retired;
+      retired = node;
     }
   }
 
   hzd->nretired = nretired;
+  return retired;
 }
 
