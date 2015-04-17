@@ -82,18 +82,22 @@ void cleanup(fifo_t * fifo, node_t * head, handle_t * handle)
       head = check(&p->deq, &p->hazard, head);
     }
 
-    if (curr != head) {
-      fifo->head.node = head;
-      release_fence();
+    if (curr == head) {
       fifo->head.index = head->id;
-
-      node_t * next = handle->retired;
-      handle->retired = curr;
-      for (; curr->next != head; curr = curr->next);
-      curr->next = next;
-    } else {
-      fifo->head.index = head->id;
+      return;
     }
+
+    fifo->head.node = head;
+    release_fence();
+    fifo->head.index = head->id;
+
+    node_t * next;
+
+    do {
+      next = curr->next;
+      free(curr);
+      curr = next;
+    } while (curr != head);
   }
 }
 
@@ -110,10 +114,10 @@ node_t * locate(node_t * node, size_t to, handle_t * handle)
     node_t * next = handle->retired;
 
     if (next) {
-      handle->retired = next->next;
       next->next = NULL;
       next->id = i + 1;
       release_fence();
+      handle->retired = NULL;
     } else {
       next = new_node(i + 1);
     }
@@ -122,7 +126,6 @@ node_t * locate(node_t * node, size_t to, handle_t * handle)
       node = next;
       handle->winner = 1;
     } else {
-      next->next = handle->retired;
       handle->retired = next;
     }
   }
