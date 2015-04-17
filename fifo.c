@@ -91,12 +91,9 @@ void cleanup(fifo_t * fifo, node_t * head, handle_t * handle)
 }
 
 static inline
-int locate(node_t ** pnode, size_t to, size_t size)
+node_t * locate(node_t * node, size_t to, size_t size, int * winner)
 {
-  int winner = 0;
-  node_t * node = *pnode;
-
-  long i;
+  size_t i;
   for (i = node->id; i < to; ++i) {
     node_t * prev = node;
     node = prev->next;
@@ -107,14 +104,13 @@ int locate(node_t ** pnode, size_t to, size_t size)
 
     if (compare_and_swap(&prev->next, &node, next)) {
       node = next;
-      winner = 1;
+      *winner = 1;
     } else {
       free(next);
     }
   }
 
-  *pnode = node;
-  return winner;
+  return node;
 }
 
 void fifo_put(fifo_t * fifo, handle_t * handle, void * data)
@@ -129,8 +125,7 @@ void fifo_put(fifo_t * fifo, handle_t * handle, void * data)
   size_t li = i % s;
 
   if (node->id != ni) {
-    handle->winner = locate(&handle->enq, ni, s);
-    node = handle->enq;
+    node = handle->enq = locate(node, ni, s, &handle->winner);
   }
 
   node->buffer[li].data = data;
@@ -149,8 +144,7 @@ void * fifo_get(fifo_t * fifo, handle_t * handle)
   size_t li = i % s;
 
   if (node->id != ni) {
-    handle->winner = locate(&handle->deq, ni, s);
-    node = handle->deq;
+    node = handle->deq = locate(node, ni, s, &handle->winner);
   }
 
   void * val;
