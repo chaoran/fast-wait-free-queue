@@ -195,7 +195,7 @@ void fifo_register(fifo_t * fifo, handle_t * me)
   me->deq = fifo->head.node;
   me->hazard = NULL;
   me->winner = 0;
-  me->retired = NULL;
+  me->retired = new_node(0, fifo->size);
 
   _hzdptr_enlist((hzdptr_t *) me);
 }
