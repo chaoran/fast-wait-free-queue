@@ -21,6 +21,7 @@ typedef struct DOUBLE_CACHE_ALIGNED _fifo_handle_t {
   struct _fifo_node_t * enq;
   struct _fifo_node_t * deq;
   struct _fifo_node_t * hazard;
+  struct _fifo_node_t * retired;
   int winner;
 } fifo_handle_t;
 

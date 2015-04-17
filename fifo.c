@@ -82,20 +82,23 @@ void cleanup(fifo_t * fifo, node_t * head, handle_t * handle)
       head = check(&p->deq, &p->hazard, head);
     }
 
-    while (curr != head) {
-      node_t * next = curr->next;
-      free(curr);
-      curr = next;
-    }
+    if (curr != head) {
+      fifo->head.node = head;
+      release_fence();
+      fifo->head.index = head->id;
 
-    fifo->head.node = head;
-    release_fence();
-    fifo->head.index = head->id;
+      node_t * next = handle->retired;
+      handle->retired = curr;
+      for (; curr->next != head; curr = curr->next);
+      curr->next = next;
+    } else {
+      fifo->head.index = head->id;
+    }
   }
 }
 
 static inline
-node_t * locate(node_t * node, size_t to, size_t size, int * winner)
+node_t * locate(node_t * node, size_t to, size_t size, handle_t * handle)
 {
   size_t i;
   for (i = node->id; i < to; ++i) {
@@ -104,13 +107,23 @@ node_t * locate(node_t * node, size_t to, size_t size, int * winner)
 
     if (node) continue;
 
-    node_t * next = new_node(i + 1, size);
+    node_t * next = handle->retired;
+
+    if (next) {
+      handle->retired = next->next;
+      next->next = NULL;
+      next->id = i + 1;
+      release_fence();
+    } else {
+      next = new_node(i + 1, size);
+    }
 
     if (compare_and_swap(&prev->next, &node, next)) {
       node = next;
-      *winner = 1;
+      handle->winner = 1;
     } else {
-      free(next);
+      next->next = handle->retired;
+      handle->retired = next;
     }
   }
 
@@ -129,7 +142,7 @@ void fifo_put(fifo_t * fifo, handle_t * handle, void * data)
   size_t li = i % s;
 
   if (node->id != ni) {
-    node = handle->enq = locate(node, ni, s, &handle->winner);
+    node = handle->enq = locate(node, ni, s, handle);
   }
 
   node->buffer[li].data = data;
@@ -148,11 +161,12 @@ void * fifo_get(fifo_t * fifo, handle_t * handle)
   size_t li = i % s;
 
   if (node->id != ni) {
-    node = handle->deq = locate(node, ni, s, &handle->winner);
+    node = handle->deq = locate(node, ni, s, handle);
   }
 
   void * val;
   spin_while(NULL == (val = node->buffer[li].data));
+  node->buffer[li].data = NULL;
   handle->hazard = NULL;
 
   if (handle->winner) {
@@ -170,6 +184,7 @@ void fifo_init(fifo_t * fifo, size_t size, size_t width)
 
   fifo->head.index = 0;
   fifo->head.node = new_node(0, size);
+
   fifo->enq = 0;
   fifo->deq = 0;
 }
@@ -180,6 +195,7 @@ void fifo_register(fifo_t * fifo, handle_t * me)
   me->deq = fifo->head.node;
   me->hazard = NULL;
   me->winner = 0;
+  me->retired = NULL;
 
   _hzdptr_enlist((hzdptr_t *) me);
 }
