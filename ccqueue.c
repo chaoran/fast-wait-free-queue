@@ -18,6 +18,7 @@ typedef struct _ccqueue_t {
 typedef struct _handle_t {
   ccsynch_handle_t enq;
   ccsynch_handle_t deq;
+  node_t * next;
 } handle_t;
 
 static inline
@@ -66,11 +67,13 @@ void ccqueue_handle_init(ccqueue_t * queue, handle_t * handle)
 {
   ccsynch_handle_init(&handle->enq);
   ccsynch_handle_init(&handle->deq);
+
+  handle->next = align_malloc(sizeof(node_t), CACHE_LINE_SIZE);
 }
 
 void ccqueue_enq(ccqueue_t * queue, handle_t * handle, void * data)
 {
-  node_t * node = align_malloc(sizeof(node_t), CACHE_LINE_SIZE);
+  node_t * node = handle->next;
   node->data = data;
   node->next = NULL;
 
@@ -83,7 +86,7 @@ void * ccqueue_deq(ccqueue_t * queue, handle_t * handle)
   ccsynch_apply(&queue->deq, &handle->deq, &serialDequeue, &queue->head, &node);
 
   void * data = node->data;
-  free(node);
+  handle->next = node;
   return data;
 }
 
