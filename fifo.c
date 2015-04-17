@@ -39,11 +39,15 @@ node_t * check(node_t ** pnode, node_t * volatile * phazard,
 
   if (phazard) {
     if (node->id < to->id) {
-      node_t * curr = node;
-      int succ = compare_and_swap(pnode, &curr, to);
+      int succ = compare_and_swap(pnode, &node, to);
       acquire_fence();
       node_t * hazard = *phazard;
-      node = hazard ? hazard : (succ ? to : curr);
+
+      if (hazard) {
+        node = hazard;
+      } else if (succ) {
+        node = to;
+      }
 
       if (node->id < to->id) {
         to = node;
