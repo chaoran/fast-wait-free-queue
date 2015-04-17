@@ -90,7 +90,7 @@ void * msqueue_get(msqueue_t * q, hzdptr_t * hzd)
 static msqueue_t msqueue;
 static int n = 10000000;
 static hzdptr_t ** hzdptrs;
-static _nprocs;
+static int _nprocs;
 
 int init(int nprocs)
 {
