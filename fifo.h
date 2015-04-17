@@ -6,8 +6,8 @@
 struct _fifo_node_t;
 
 typedef struct DOUBLE_CACHE_ALIGNED {
-  volatile long enq DOUBLE_CACHE_ALIGNED;
-  volatile long deq DOUBLE_CACHE_ALIGNED;
+  volatile size_t enq DOUBLE_CACHE_ALIGNED;
+  volatile size_t deq DOUBLE_CACHE_ALIGNED;
   volatile struct {
     int index;
     struct _fifo_node_t * node;
