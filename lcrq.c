@@ -30,18 +30,18 @@ typedef struct RingNode {
   volatile uint64_t val;
   volatile uint64_t idx;
   uint64_t pad[14];
-} RingNode __attribute__ ((aligned (128)));
+} RingNode DOUBLE_CACHE_ALIGNED;
 
 typedef struct RingQueue {
-  volatile int64_t head __attribute__ ((aligned (128)));
-  volatile int64_t tail __attribute__ ((aligned (128)));
-  struct RingQueue *next __attribute__ ((aligned (128)));
+  volatile int64_t head DOUBLE_CACHE_ALIGNED;
+  volatile int64_t tail DOUBLE_CACHE_ALIGNED;
+  struct RingQueue *next DOUBLE_CACHE_ALIGNED;
   RingNode array[RING_SIZE];
-} RingQueue __attribute__ ((aligned (128)));
+} RingQueue DOUBLE_CACHE_ALIGNED;
 
 typedef struct _lcrq_t {
-  RingQueue * volatile head;
-  RingQueue * volatile tail;
+  RingQueue * volatile head DOUBLE_CACHE_ALIGNED;
+  RingQueue * volatile tail DOUBLE_CACHE_ALIGNED;
 } lcrq_t;
 
 inline void init_ring(RingQueue *r) {
