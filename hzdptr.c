@@ -67,7 +67,7 @@ void hzdptr_init(hzdptr_t * hzd, int nprocs, int nptrs)
   _hzdptr_enlist(hzd);
 }
 
-void * _hzdptr_retire(hzdptr_t * hzd, void ** rlist, void * retired)
+void _hzdptr_retire(hzdptr_t * hzd, void ** rlist)
 {
   size_t size = HZDPTR_HTBL_SIZE(hzd->nprocs, hzd->nptrs);
   void * plist[size];
@@ -97,13 +97,10 @@ void * _hzdptr_retire(hzdptr_t * hzd, void ** rlist, void * retired)
     if (htable_lookup(plist, size, ptr)) {
       rlist[nretired++] = ptr;
     } else {
-      node_t * node = (node_t *) ptr;
-      node->next = retired;
-      retired = node;
+      free(ptr);
     }
   }
 
   hzd->nretired = nretired;
-  return retired;
 }
 

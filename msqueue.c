@@ -92,7 +92,7 @@ void * msqueue_get(msqueue_t * q, handle_t * handle)
     if (compare_and_swap(&q->head, &head, next)) break;
   }
 
-  hzdptr_retire(&handle->hzd, head, (void **) &handle->next);
+  hzdptr_retire(&handle->hzd, head);
   return data;
 }
 
