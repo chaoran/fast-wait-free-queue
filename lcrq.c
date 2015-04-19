@@ -5,20 +5,7 @@
 #include "atomic.h"
 #include "hzdptr.h"
 
-// Definition: RING_POW
-// --------------------
-// The LCRQ's ring size will be 2^{RING_POW}.
-#ifndef RING_POW
-#define RING_POW        (17)
-#endif
-#define RING_SIZE       (1ull << RING_POW)
-
-// Definition: HAVE_HPTRS
-// --------------------
-// Define to enable hazard pointer setting for safe memory
-// reclamation.  You'll need to integrate this with your
-// hazard pointers implementation.
-//#define HAVE_HPTRS
+#define RING_SIZE (1ull << 17)
 
 inline int is_empty(uint64_t v) __attribute__ ((pure));
 inline uint64_t node_index(uint64_t i) __attribute__ ((pure));
