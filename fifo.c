@@ -13,7 +13,7 @@ typedef union {
 typedef struct _fifo_node_t {
   struct _fifo_node_t * volatile next CACHE_ALIGNED;
   size_t id CACHE_ALIGNED;
-  cache_t buffer[0] CACHE_ALIGNED;
+  cache_t buffer[FIFO_NODE_SIZE] CACHE_ALIGNED;
 } node_t;
 
 typedef fifo_handle_t handle_t;
@@ -21,10 +21,8 @@ typedef fifo_handle_t handle_t;
 static inline
 node_t * new_node(size_t id)
 {
-  const static size_t size = sizeof(node_t) + sizeof(cache_t [FIFO_NODE_SIZE]);
-
-  node_t * node = align_malloc(size, PAGE_SIZE);
-  memset(node, 0, size);
+  node_t * node = malloc(sizeof(node_t));
+  memset(node, 0, sizeof(node_t));
 
   node->id = id;
   release_fence();
