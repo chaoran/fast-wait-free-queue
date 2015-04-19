@@ -4,7 +4,7 @@
 #include "hzdptr.h"
 
 typedef struct _node_t {
-  struct _node_t * volatile next;
+  struct _node_t * volatile next DOUBLE_CACHE_ALIGNED;
   void * data DOUBLE_CACHE_ALIGNED;
 } node_t;
 
@@ -19,7 +19,7 @@ typedef struct _handle_t {
 
 void msqueue_init(msqueue_t * q)
 {
-  node_t * node = align_malloc(sizeof(node_t), CACHE_LINE_SIZE);
+  node_t * node = malloc(sizeof(node_t));
   node->next = NULL;
 
   q->head = node;
