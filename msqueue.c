@@ -14,7 +14,6 @@ typedef struct _msqueue_t {
 } msqueue_t;
 
 typedef struct _handle_t {
-  struct _node_t * next;
   hzdptr_t hzd;
 } handle_t;
 
@@ -29,13 +28,7 @@ void msqueue_init(msqueue_t * q)
 
 void msqueue_put(msqueue_t * q, handle_t * handle, void * data)
 {
-  node_t * node = handle->next;
-
-  if (node) {
-    handle->next = node->next;
-  } else {
-    node = align_malloc(sizeof(node_t), CACHE_LINE_SIZE);
-  }
+  node_t * node = malloc(sizeof(node_t));
 
   node->data = data;
   node->next = NULL;
@@ -116,7 +109,6 @@ int init(int nprocs)
 void thread_init(int id) {
   handles[id] = malloc(sizeof(handle_t) + hzdptr_size(_nprocs, 2));
   hzdptr_init(&handles[id]->hzd, _nprocs, 2);
-  handles[id]->next = NULL;
 };
 
 void thread_exit(int id, void * local) {};
