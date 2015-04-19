@@ -3,6 +3,7 @@
 #include <string.h>
 #include "align.h"
 #include "atomic.h"
+#include "hzdptr.h"
 
 // Definition: RING_POW
 // --------------------
@@ -117,7 +118,7 @@ inline void fixState(RingQueue *rq) {
 
 typedef struct _lcrq_handle_t {
   RingQueue * next;
-  char padding[2 * CACHE_LINE_SIZE - sizeof(RingQueue *)];
+  hzdptr_t hzdptr;
 } lcrq_handle_t;
 
 inline int close_crq(RingQueue *rq, const uint64_t t, const int tries) {
@@ -133,14 +134,7 @@ static void lcrq_put(lcrq_t * q, lcrq_handle_t * handle, uint64_t arg) {
   int try_close = 0;
 
   while (1) {
-    RingQueue *rq = q->tail;
-
-#ifdef HAVE_HPTRS
-    SWAP(&hazardptr, rq);
-    if (q->tail != rq)
-      continue;
-#endif
-
+    RingQueue *rq = hzdptr_setv(&q->tail, &handle->hzdptr, 0);
     RingQueue *next = rq->next;
 
     if (next != NULL) {
@@ -196,16 +190,10 @@ alloc:
   }
 }
 
-static uint64_t lcrq_get(lcrq_t * q) {
+static uint64_t lcrq_get(lcrq_t * q, lcrq_handle_t * handle) {
   while (1) {
-    RingQueue *rq = q->head;
+    RingQueue *rq = hzdptr_setv(&q->head, &handle->hzdptr, 0);
     RingQueue *next;
-
-#ifdef HAVE_HPTRS
-    SWAP(&hazardptr, rq);
-    if (head != rq)
-      continue;
-#endif
 
     uint64_t h = fetch_and_add(&rq->head, 1);
 
@@ -261,8 +249,11 @@ static uint64_t lcrq_get(lcrq_t * q) {
       next = rq->next;
       if (next == NULL)
         return -1;  // EMPTY
-      if (tail_index(rq->tail) <= h + 1)
-        compare_and_swap(&q->head, &rq, next);
+      if (tail_index(rq->tail) <= h + 1) {
+        if (compare_and_swap(&q->head, &rq, next)) {
+          hzdptr_retire(&handle->hzdptr, rq);
+        }
+      }
     }
   }
 }
@@ -272,15 +263,22 @@ static uint64_t lcrq_get(lcrq_t * q) {
 
 static lcrq_t queue;
 static int n = 10000000;
-static lcrq_handle_t * handles;
+static lcrq_handle_t ** handles;
+static int NPROCS;
 
 int init(int nprocs)
 {
+  NPROCS = nprocs;
   lcrq_init(&queue);
-  handles = malloc(sizeof(lcrq_handle_t [nprocs]));
-  memset(handles, 0, sizeof(lcrq_handle_t [nprocs]));
+  handles = malloc(sizeof(lcrq_handle_t * [nprocs]));
   n /= nprocs;
   return n;
+}
+
+void thread_init(int id)
+{
+  handles[id] = malloc(sizeof(lcrq_handle_t) + hzdptr_size(NPROCS, 1));
+  hzdptr_init(&handles[id]->hzdptr, NPROCS, 1);
 }
 
 int test(int id)
@@ -289,16 +287,15 @@ int test(int id)
   int i;
 
   for (i = 0; i < n; ++i) {
-    lcrq_put(&queue, &handles[id], val);
+    lcrq_put(&queue, handles[id], val);
 
-    do val = lcrq_get(&queue);
+    do val = lcrq_get(&queue, handles[id]);
     while (val == (uint64_t) -1);
   }
 
   return (int) val;
 }
 
-void thread_init(int id) {}
 void thread_exit(int id) {}
 
 #endif

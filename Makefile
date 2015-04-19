@@ -7,7 +7,7 @@ all: $(TESTS)
 
 $(TESTS): verify.o cpumap.o main.o harness.o
 
-msqueue: hzdptr.c xxhash.c
+msqueue lcrq: hzdptr.c xxhash.c
 
 clean:
 	rm -f $(TESTS) *.o
