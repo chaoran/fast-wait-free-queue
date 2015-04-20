@@ -251,11 +251,9 @@ static uint64_t lcrq_get(lcrq_t * q, lcrq_handle_t * handle) {
 static lcrq_t queue;
 static int n = 10000000;
 static lcrq_handle_t ** handles;
-static int NPROCS;
 
 int init(int nprocs)
 {
-  NPROCS = nprocs;
   lcrq_init(&queue);
   handles = malloc(sizeof(lcrq_handle_t * [nprocs]));
   n /= nprocs;
@@ -264,6 +262,7 @@ int init(int nprocs)
 
 void thread_init(int id)
 {
+  extern int NPROCS;
   handles[id] = malloc(sizeof(lcrq_handle_t) + hzdptr_size(NPROCS, 1));
   hzdptr_init(&handles[id]->hzdptr, NPROCS, 1);
 }

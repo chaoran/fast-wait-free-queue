@@ -7,14 +7,14 @@
 #include <pthread.h>
 #include "harness.h"
 
-static int _nprocs;
+int NPROCS;
 
 static void thread_pin(int id)
 {
   cpu_set_t set;
   CPU_ZERO(&set);
 
-  int cpu = cpumap(id, _nprocs);
+  int cpu = cpumap(id, NPROCS);
   CPU_SET(cpu, &set);
   sched_setaffinity(0, sizeof(set), &set);
 }
@@ -55,7 +55,7 @@ int main(int argc, const char *argv[])
   pthread_t hds[nprocs];
   size_t i;
 
-  _nprocs = nprocs;
+  NPROCS = nprocs;
 
   for (i = 1; i < nprocs; ++i) {
     pthread_create(hds + i, NULL, thread_main, (void *) i);

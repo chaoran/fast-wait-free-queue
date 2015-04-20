@@ -95,11 +95,9 @@ void * msqueue_get(msqueue_t * q, handle_t * handle)
 static msqueue_t msqueue;
 static int n = 10000000;
 static handle_t ** handles;
-static int _nprocs;
 
 int init(int nprocs)
 {
-  _nprocs = nprocs;
   msqueue_init(&msqueue);
   handles = malloc(sizeof(handle_t * [nprocs]));
   n /= nprocs;
@@ -107,8 +105,9 @@ int init(int nprocs)
 }
 
 void thread_init(int id) {
-  handles[id] = malloc(sizeof(handle_t) + hzdptr_size(_nprocs, 2));
-  hzdptr_init(&handles[id]->hzd, _nprocs, 2);
+  extern int NPROCS;
+  handles[id] = malloc(sizeof(handle_t) + hzdptr_size(NPROCS, 2));
+  hzdptr_init(&handles[id]->hzd, NPROCS, 2);
 };
 
 void thread_exit(int id, void * local) {};
