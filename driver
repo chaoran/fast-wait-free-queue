@@ -42,10 +42,10 @@ while true; do
 
   PRECISION=$(echo "$ERR / $MEAN" | bc -l)
 
-  printf '#%-2d %.2f %.2f %.4f %.2f %.2f %.2f\n' \
+  printf '#%-2d %.2f %.2f %.4f %.2f %.3f\n' \
     $N $TIME $MEAN $STD $ERR $PRECISION
 
-  if (($N >= 30 || $N > 5 && $(echo "$PRECISION < 0.02" | bc) == 1)); then
+  if (($N >= 10 || $N > 5 && $(echo "$PRECISION < 0.02" | bc) == 1)); then
     break
   else
     i=$N
