@@ -9,10 +9,12 @@
 #define swap(ptr, val) __atomic_exchange_n(ptr, val, __ATOMIC_RELAXED)
 #define acquire_fence() __atomic_thread_fence(__ATOMIC_ACQUIRE)
 #define release_fence() __atomic_thread_fence(__ATOMIC_RELEASE)
+#define mfence() __atomic_thread_fence(__ATOMIC_SEQ_CST)
 
 #elif __IBM_C__
 #define acquire_fence() __isync()
 #define release_fence() __lswync()
+#define mfence() __sync()
 #define compare_and_swap(p, o, n) \
   __compare_and_swaplp((volatile long *) p, (long *) o, (long) n)
 #define swap(p, v) __fetch_and_swaplp((volatile long *) p, (long) v)
@@ -24,6 +26,7 @@
 #else
 #define acquire_fence() __asm__("isync":::"memory")
 #define release_fence() __asm__("lwsync":::"memory")
+#define mfence() __asm__("sync":::"memory")
 static inline
 int _compare_and_swap(volatile long * ptr, long * cmp, long val)
 {

@@ -50,9 +50,8 @@ void * _hzdptr_setv(void volatile * ptr_, void * hzd_)
 
   do {
     *hzd = val;
-    release_fence();
     tmp = val;
-    acquire_fence();
+    mfence();
     val = *ptr;
   } while (val != tmp);
 
