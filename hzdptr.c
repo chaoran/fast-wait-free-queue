@@ -91,7 +91,7 @@ void _hzdptr_retire(hzdptr_t * hzd, void ** rlist)
 
   /** Check pointers in retire list with plist. */
   int i;
-  for (i = 0; i < HZDPTR_THRESHOLD(hzd->nprocs); ++i) {
+  for (i = 0; i < hzd->nretired; ++i) {
     ptr = rlist[i];
 
     if (htable_lookup(plist, size, ptr)) {
