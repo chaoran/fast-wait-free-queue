@@ -267,6 +267,12 @@ void thread_init(int id)
   hzdptr_init(&handles[id]->hzdptr, NPROCS, 1);
 }
 
+void thread_exit(int id)
+{
+  hzdptr_exit(&handles[id]->hzdptr);
+  free(handles[id]);
+}
+
 int test(int id)
 {
   uint64_t val = id + 1;
@@ -281,7 +287,5 @@ int test(int id)
 
   return (int) val;
 }
-
-void thread_exit(int id) {}
 
 #endif

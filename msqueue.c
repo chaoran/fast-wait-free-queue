@@ -110,7 +110,11 @@ void thread_init(int id) {
   hzdptr_init(&handles[id]->hzd, NPROCS, 2);
 };
 
-void thread_exit(int id, void * local) {};
+void thread_exit(int id)
+{
+  hzdptr_exit(&handles[id]->hzd);
+  free(handles[id]);
+};
 
 int test(int id)
 {

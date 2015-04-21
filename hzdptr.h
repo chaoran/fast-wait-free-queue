@@ -14,6 +14,7 @@ typedef struct _hzdptr_t {
 #define HZDPTR_THRESHOLD(nprocs) (2 * nprocs)
 
 extern void hzdptr_init(hzdptr_t * hzd, int nprocs, int nptrs);
+extern void hzdptr_exit(hzdptr_t * hzd);
 extern void _hzdptr_retire(hzdptr_t * hzd, void ** rlist);
 
 static inline

@@ -104,3 +104,16 @@ void _hzdptr_retire(hzdptr_t * hzd, void ** rlist)
   hzd->nretired = nretired;
 }
 
+void hzdptr_exit(hzdptr_t * hzd)
+{
+  int i;
+  void ** rlist = &hzd->ptrs[hzd->nptrs];
+
+  for (i = 0; i < hzd->nretired; ++i) {
+    free(rlist[i]);
+  }
+
+  hzd->nretired = 0;
+  hzd->next = hzd;
+}
+
