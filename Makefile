@@ -1,4 +1,4 @@
-TESTS = fifo lcrq ccqueue msqueue faa
+TESTS = fifo lcrq ccqueue msqueue faa clh
 
 CFLAGS = -g -O3 -DBENCHMARK -pthread
 LDLIBS = -lpthread -lm
