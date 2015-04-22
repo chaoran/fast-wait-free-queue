@@ -44,7 +44,7 @@ void serialDequeue(void * state, void * data)
     node->data = next->data;
     *head = next;
   } else {
-    node->data = (void *) -1;
+    node = (void *) -1;
   }
 
   *ptr = node;
@@ -85,9 +85,8 @@ void * ccqueue_deq(ccqueue_t * queue, handle_t * handle)
   node_t * node;
   ccsynch_apply(&queue->deq, &handle->deq, &serialDequeue, &queue->head, &node);
 
-  void * data = node->data;
   handle->next = node;
-  return data;
+  return node ? node->data : (void *) -1;
 }
 
 #ifdef BENCHMARK
