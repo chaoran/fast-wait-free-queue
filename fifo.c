@@ -144,6 +144,8 @@ void fifo_put(fifo_t * fifo, handle_t * handle, void * data)
   }
 
   node->buffer[li].data = data;
+
+  release_fence();
   handle->hazard = NULL;
 }
 
@@ -161,7 +163,11 @@ void * fifo_get(fifo_t * fifo, handle_t * handle)
 
   void * val;
   spin_while(NULL == (val = node->buffer[li].data));
+  acquire_fence();
+
   node->buffer[li].data = NULL;
+
+  release_fence();
   handle->hazard = NULL;
 
   if (handle->winner) {
