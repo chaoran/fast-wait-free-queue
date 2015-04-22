@@ -67,6 +67,7 @@ long fetch_and_add(volatile long * ptr, long val)
 
   return old;
 }
+
 static inline
 void * swap(volatile void * ptr, void * val)
 {
@@ -77,7 +78,7 @@ void * swap(volatile void * ptr, void * val)
       "ldarx %0,0,%2\n"
       "stdcx. %1,0,%2\n"
       "bne- 1b\n"
-      : "=r" (old)
+      : "=&r" (old)
       : "r" (val), "r" (ptr)
       : "cc" );
 
