@@ -10,38 +10,40 @@ typedef struct _clh_node_t {
 } clh_node_t;
 
 typedef struct _clh_lock_t {
-  clh_node_t * tail DOUBLE_CACHE_ALIGNED;
+  clh_node_t * volatile tail DOUBLE_CACHE_ALIGNED;
 } clh_lock_t;
 
-typedef struct _clh_handle_t {
-  clh_node_t * node DOUBLE_CACHE_ALIGNED;
-} clh_handle_t;
+typedef struct _clh_t {
+  clh_lock_t * lock;
+  clh_node_t * node;
+} clh_t;
 
 #define CLH_FLAG_WAIT  0
 #define CLH_FLAG_READY 1
 
+extern void clh_init(clh_lock_t * lock, clh_t * clh);
 extern void clh_lock_init(clh_lock_t * lock);
 
 static inline
-void clh_lock(clh_lock_t * lock, clh_handle_t * handle)
+void clh_lock(clh_t * clh)
 {
-  clh_node_t * next = handle->node;
+  clh_node_t * next = clh->node;
   next->flag = CLH_FLAG_WAIT;
   release_fence();
 
-  clh_node_t * node = swap(&lock->tail, next);
+  clh_node_t * node = swap(&clh->lock->tail, next);
   node->next = next;
 
   spin_while(node->flag == CLH_FLAG_WAIT);
   acquire_fence();
 
-  handle->node = node;
+  clh->node = node;
 }
 
 static inline
-void clh_unlock(clh_lock_t * lock, clh_handle_t * handle)
+void clh_unlock(clh_t * clh)
 {
-  handle->node->next->flag = CLH_FLAG_READY;
+  clh->node->next->flag = CLH_FLAG_READY;
   release_fence();
 }
 
