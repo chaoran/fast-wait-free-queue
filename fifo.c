@@ -133,11 +133,15 @@ node_t * locate(node_t * node, size_t to, handle_t * handle)
 
 void fifo_put(fifo_t * fifo, handle_t * handle, void * data)
 {
-  node_t * node = _hzdptr_setv(&handle->enq, &handle->hazard);
+  handle->hazard = handle->enq;
+  release_fence();
 
   size_t i  = fetch_and_add(&fifo->enq, 1);
   size_t ni = i / FIFO_NODE_SIZE;
   size_t li = i % FIFO_NODE_SIZE;
+
+  acquire_fence();
+  node_t * node = handle->enq;
 
   if (node->id != ni) {
     node = handle->enq = locate(node, ni, handle);
@@ -151,11 +155,15 @@ void fifo_put(fifo_t * fifo, handle_t * handle, void * data)
 
 void * fifo_get(fifo_t * fifo, handle_t * handle)
 {
-  node_t * node = _hzdptr_setv(&handle->deq, &handle->hazard);
+  handle->hazard = handle->deq;
+  release_fence();
 
   size_t i  = fetch_and_add(&fifo->deq, 1);
   size_t ni = i / FIFO_NODE_SIZE;
   size_t li = i % FIFO_NODE_SIZE;
+
+  acquire_fence();
+  node_t * node = handle->deq;
 
   if (node->id != ni) {
     node = handle->deq = locate(node, ni, handle);
