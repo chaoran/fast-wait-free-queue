@@ -176,6 +176,8 @@ alloc:
       goto alloc;
     }
   }
+
+  hzdptr_clear(&handle->hzdptr, 0);
 }
 
 static uint64_t lcrq_get(lcrq_t * q, lcrq_handle_t * handle) {
@@ -244,6 +246,8 @@ static uint64_t lcrq_get(lcrq_t * q, lcrq_handle_t * handle) {
       }
     }
   }
+
+  hzdptr_clear(&handle->hzdptr, 0);
 }
 
 #ifdef BENCHMARK
