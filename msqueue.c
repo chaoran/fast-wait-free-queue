@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include "rand.h"
 #include "align.h"
 #include "atomic.h"
 #include "hzdptr.h"
@@ -119,13 +120,15 @@ void thread_exit(int id)
 int test(int id)
 {
   void * val = (void *) (intptr_t) (id + 1);
-  int i;
+  int i, j;
 
   for (i = 0; i < n; ++i) {
     msqueue_put(&msqueue, handles[id], val);
+    for (j = 0; j < simRandomRange(1, 64); ++j) __asm__ ("nop");
 
     do val = msqueue_get(&msqueue, handles[id]);
     while (val == (void *) -1);
+    for (j = 0; j < simRandomRange(1, 64); ++j) __asm__ ("nop");
   }
 
   return (int) (intptr_t) val;

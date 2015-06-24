@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <stdlib.h>
+#include "rand.h"
 #include "align.h"
 #include "ccsynch.h"
 
@@ -109,6 +110,7 @@ void thread_init(int id)
   handle_t * handle = malloc(sizeof(handle_t));
   handles[id] = handle;
   ccqueue_handle_init(&queue, handle);
+  simSRandom(id + 1);
 }
 
 void thread_exit(int id, void * args) {}
@@ -116,15 +118,17 @@ void thread_exit(int id, void * args) {}
 int test(int id)
 {
   intptr_t val = id + 1;
-  int i;
+  int i, j;
 
   handle_t * handle = handles[id];
 
   for (i = 0; i < n; ++i) {
     ccqueue_enq(&queue, handle, (void *) val);
+    for (j = 0; j < simRandomRange(1, 64); ++j) __asm__ ("nop");
 
     do val = (intptr_t) ccqueue_deq(&queue, handle);
     while (val == -1);
+    for (j = 0; j < simRandomRange(1, 64); ++j) __asm__ ("nop");
   }
 
   return (int) val;

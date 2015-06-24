@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "fifo.h"
+#include "rand.h"
 #include "atomic.h"
 #include "hzdptr.h"
 
@@ -226,6 +227,7 @@ int init(int nprocs)
 
 void thread_init(int id)
 {
+  simSRandom(id + 1);
   fifo_handle_t * handle = malloc(sizeof(fifo_handle_t));
   handles[id] = handle;
   fifo_register(&fifo, handle);
@@ -236,11 +238,13 @@ void thread_exit(int id) {}
 int test(int id)
 {
   void * val = (void *) (intptr_t) (id + 1);
-  int i;
+  int i, j;
 
   for (i = 0; i < n; ++i) {
     fifo_put(&fifo, handles[id], val);
+    for (j = 0; j < simRandomRange(1, 64); ++j) __asm__ ("nop");
     val = fifo_get(&fifo, handles[id]);
+    for (j = 0; j < simRandomRange(1, 64); ++j) __asm__ ("nop");
   }
 
   return (int) (intptr_t) val;
