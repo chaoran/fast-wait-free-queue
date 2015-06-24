@@ -3,7 +3,7 @@
 
 #include "align.h"
 
-#define FIFO_NODE_SIZE 510
+#define FIFO_NODE_SIZE (1 << 20 - 2)
 
 struct _fifo_node_t;
 
@@ -11,7 +11,7 @@ typedef struct DOUBLE_CACHE_ALIGNED {
   volatile size_t enq DOUBLE_CACHE_ALIGNED;
   volatile size_t deq DOUBLE_CACHE_ALIGNED;
   volatile struct {
-    int index;
+    size_t index;
     struct _fifo_node_t * node;
   } head DOUBLE_CACHE_ALIGNED;
   size_t nprocs;
