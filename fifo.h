@@ -3,7 +3,7 @@
 
 #include "align.h"
 
-#define FIFO_NODE_SIZE (1 << 20 - 2)
+#define FIFO_NODE_SIZE (1 << 12 - 2)
 
 struct _fifo_node_t;
 
