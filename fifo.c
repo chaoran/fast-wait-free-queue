@@ -6,10 +6,7 @@
 #include "atomic.h"
 #include "hzdptr.h"
 
-typedef union {
-  void * volatile data;
-  char padding[CACHE_LINE_SIZE];
-} cache_t;
+typedef void * volatile cache_t[8];
 
 typedef struct _fifo_node_t {
   struct _fifo_node_t * volatile next CACHE_ALIGNED;
@@ -18,6 +15,9 @@ typedef struct _fifo_node_t {
 } node_t;
 
 typedef fifo_handle_t handle_t;
+
+#define FIFO_NUM_CELLS (8 * FIFO_NODE_SIZE)
+#define CELL(n, i) n->buffer[i % FIFO_NODE_SIZE][i / FIFO_NODE_SIZE]
 
 static inline
 node_t * new_node(size_t id)
@@ -138,8 +138,8 @@ void fifo_put(fifo_t * fifo, handle_t * handle, void * data)
   release_fence();
 
   size_t i  = fetch_and_add(&fifo->enq, 1);
-  size_t ni = i / FIFO_NODE_SIZE;
-  size_t li = i % FIFO_NODE_SIZE;
+  size_t ni = i / FIFO_NUM_CELLS;
+  size_t li = i % FIFO_NUM_CELLS;
 
   acquire_fence();
   node_t * node = handle->enq;
@@ -148,7 +148,7 @@ void fifo_put(fifo_t * fifo, handle_t * handle, void * data)
     node = handle->enq = locate(node, ni, handle);
   }
 
-  node->buffer[li].data = data;
+  CELL(node, li) = data;
 
   release_fence();
   handle->hazard = NULL;
@@ -160,8 +160,8 @@ void * fifo_get(fifo_t * fifo, handle_t * handle)
   release_fence();
 
   size_t i  = fetch_and_add(&fifo->deq, 1);
-  size_t ni = i / FIFO_NODE_SIZE;
-  size_t li = i % FIFO_NODE_SIZE;
+  size_t ni = i / FIFO_NUM_CELLS;
+  size_t li = i % FIFO_NUM_CELLS;
 
   acquire_fence();
   node_t * node = handle->deq;
@@ -171,12 +171,9 @@ void * fifo_get(fifo_t * fifo, handle_t * handle)
   }
 
   void * val;
-  spin_while(NULL == (val = node->buffer[li].data));
-  acquire_fence();
-
-  node->buffer[li].data = NULL;
-
+  spin_while(NULL == (val = CELL(node, li)));
   release_fence();
+
   handle->hazard = NULL;
 
   if (handle->winner) {
