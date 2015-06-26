@@ -33,4 +33,11 @@ inline static long simRandomRange(long low, long high) {
     return low + (long) ( ((double) high)* (simRandom() / (SIM_RAND_MAX + 1.0)));
 }
 
+static void work() {
+  int j;
+
+  for (j = 0; j < simRandomRange(10, 50); ++j) {
+    __asm__ ("nop");
+  }
+}
 #endif

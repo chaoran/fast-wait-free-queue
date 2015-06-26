@@ -121,14 +121,15 @@ int test(int id)
 {
   void * val = (void *) (intptr_t) (id + 1);
   int i, j;
+  simSRandom(id + 1);
 
   for (i = 0; i < n; ++i) {
     msqueue_put(&msqueue, handles[id], val);
-    for (j = 0; j < simRandomRange(1, 64); ++j) __asm__ ("nop");
+    work();
 
     do val = msqueue_get(&msqueue, handles[id]);
     while (val == (void *) -1);
-    for (j = 0; j < simRandomRange(1, 64); ++j) __asm__ ("nop");
+    work();
   }
 
   return (int) (intptr_t) val;

@@ -110,7 +110,6 @@ void thread_init(int id)
   handle_t * handle = malloc(sizeof(handle_t));
   handles[id] = handle;
   ccqueue_handle_init(&queue, handle);
-  simSRandom(id + 1);
 }
 
 void thread_exit(int id, void * args) {}
@@ -119,16 +118,17 @@ int test(int id)
 {
   intptr_t val = id + 1;
   int i, j;
+  simSRandom(id + 1);
 
   handle_t * handle = handles[id];
 
   for (i = 0; i < n; ++i) {
     ccqueue_enq(&queue, handle, (void *) val);
-    for (j = 0; j < simRandomRange(1, 64); ++j) __asm__ ("nop");
+    work();
 
     do val = (intptr_t) ccqueue_deq(&queue, handle);
     while (val == -1);
-    for (j = 0; j < simRandomRange(1, 64); ++j) __asm__ ("nop");
+    work();
   }
 
   return (int) val;

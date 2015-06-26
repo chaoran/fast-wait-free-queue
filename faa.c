@@ -10,10 +10,7 @@ int init(int nprocs) {
   return n;
 }
 
-void thread_init(int id, void * args)
-{
-  simSRandom(id + 1);
-}
+void thread_init(int id, void * args) {}
 
 void thread_exit(int id, void * args) {}
 
@@ -22,15 +19,14 @@ int test(int id)
   int i, j;
   static volatile long P DOUBLE_CACHE_ALIGNED = 0;
   static volatile long C DOUBLE_CACHE_ALIGNED = 0;
+  simSRandom(id + 1);
 
   for (i = 0; i < n; ++i) {
-    mfence();
     fetch_and_add(&P, 1);
-    for (j = 0; j < simRandomRange(1, 64); ++j);
+    work();
 
-    mfence();
     fetch_and_add(&C, 1);
-    for (j = 0; j < simRandomRange(1, 64); ++j);
+    work();
   }
 
   return id + 1;

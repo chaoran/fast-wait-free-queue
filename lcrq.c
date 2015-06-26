@@ -270,8 +270,6 @@ void thread_init(int id)
   extern int NPROCS;
   handles[id] = malloc(sizeof(lcrq_handle_t) + hzdptr_size(NPROCS, 1));
   hzdptr_init(&handles[id]->hzdptr, NPROCS, 1);
-
-  simSRandom(id + 1);
 }
 
 void thread_exit(int id)
@@ -283,15 +281,16 @@ void thread_exit(int id)
 int test(int id)
 {
   uint64_t val = id + 1;
-  int i, j;
+  int i;
+  simSRandom(id + 1);
 
   for (i = 0; i < n; ++i) {
     lcrq_put(&queue, handles[id], val);
-    for (j = 0; j < simRandomRange(1, 64); ++j) __asm__ ("nop");
+    work();
 
     do val = lcrq_get(&queue, handles[id]);
     while (val == (uint64_t) -1);
-    for (j = 0; j < simRandomRange(1, 64); ++j) __asm__ ("nop");
+    work();
   }
 
   return (int) val;
