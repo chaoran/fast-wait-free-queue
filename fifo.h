@@ -3,8 +3,6 @@
 
 #include "align.h"
 
-#define FIFO_NODE_SIZE (1 << 12 - 2)
-
 struct _fifo_node_t;
 
 typedef struct DOUBLE_CACHE_ALIGNED {

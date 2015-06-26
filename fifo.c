@@ -7,11 +7,12 @@
 #include "hzdptr.h"
 
 typedef void * volatile cache_t[8];
+size_t FIFO_NODE_SIZE;
 
 typedef struct _fifo_node_t {
   struct _fifo_node_t * volatile next CACHE_ALIGNED;
   size_t id CACHE_ALIGNED;
-  cache_t buffer[FIFO_NODE_SIZE] CACHE_ALIGNED;
+  cache_t buffer[0] CACHE_ALIGNED;
 } node_t;
 
 typedef fifo_handle_t handle_t;
@@ -22,8 +23,9 @@ typedef fifo_handle_t handle_t;
 static inline
 node_t * new_node(size_t id)
 {
-  node_t * node = malloc(sizeof(node_t));
-  memset(node, 0, sizeof(node_t));
+  size_t size = sizeof(node_t) + sizeof(cache_t [FIFO_NODE_SIZE]);
+  node_t * node = malloc(size);
+  memset(node, 0, size);
 
   node->id = id;
   release_fence();
@@ -215,6 +217,10 @@ static int n = 10000000;
 
 int init(int nprocs)
 {
+  char * strSize = getenv("FIFO_NODE_LOG_SIZE");
+  int logsize = strSize ? atoi(strSize) : 12;
+  FIFO_NODE_SIZE = logsize < 6 ? (1 << logsize) : (1 << logsize) - 2;
+
   fifo_init(&fifo, nprocs);
   handles = malloc(sizeof(fifo_handle_t * [nprocs]));
 
