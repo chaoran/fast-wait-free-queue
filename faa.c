@@ -1,6 +1,6 @@
 #ifdef BENCHMARK
-#include "rand.h"
 #include "align.h"
+#include "delay.h"
 #include "atomic.h"
 
 static int n = 10000000;
@@ -19,14 +19,15 @@ int test(int id)
   int i, j;
   static volatile long P DOUBLE_CACHE_ALIGNED = 0;
   static volatile long C DOUBLE_CACHE_ALIGNED = 0;
-  simSRandom(id + 1);
+  delay_t state;
+  delay_init(&state, id);
 
   for (i = 0; i < n; ++i) {
     fetch_and_add(&P, 1);
-    work();
+    delay_exec(&state);
 
     fetch_and_add(&C, 1);
-    work();
+    delay_exec(&state);
   }
 
   return id + 1;
