@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "fifo.h"
-#include "rand.h"
+#include "delay.h"
 #include "atomic.h"
 #include "hzdptr.h"
 
@@ -240,14 +240,16 @@ void thread_exit(int id) {}
 int test(int id)
 {
   void * val = (void *) (intptr_t) (id + 1);
-  int i;
-  simSRandom(id + 1);
+  delay_t state;
+  delay_init(&state, id);
 
+  int i;
   for (i = 0; i < n; ++i) {
     fifo_put(&fifo, handles[id], val);
-    work();
+    delay_exec(&state);
+
     val = fifo_get(&fifo, handles[id]);
-    work();
+    delay_exec(&state);
   }
 
   return (int) (intptr_t) val;

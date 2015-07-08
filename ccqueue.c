@@ -1,7 +1,7 @@
 #include <stdint.h>
 #include <stdlib.h>
-#include "rand.h"
 #include "align.h"
+#include "delay.h"
 #include "ccsynch.h"
 
 typedef struct _node_t {
@@ -117,18 +117,18 @@ void thread_exit(int id, void * args) {}
 int test(int id)
 {
   intptr_t val = id + 1;
-  int i, j;
-  simSRandom(id + 1);
-
   handle_t * handle = handles[id];
+  delay_t state;
+  delay_init(&state, id);
 
+  int i;
   for (i = 0; i < n; ++i) {
     ccqueue_enq(&queue, handle, (void *) val);
-    work();
+    delay_exec(&state);
 
     do val = (intptr_t) ccqueue_deq(&queue, handle);
     while (val == -1);
-    work();
+    delay_exec(&state);
   }
 
   return (int) val;

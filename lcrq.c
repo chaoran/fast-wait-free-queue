@@ -1,8 +1,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include "rand.h"
 #include "align.h"
+#include "delay.h"
 #include "atomic.h"
 #include "hzdptr.h"
 
@@ -282,15 +282,17 @@ int test(int id)
 {
   uint64_t val = id + 1;
   int i;
-  simSRandom(id + 1);
+
+  delay_t state;
+  delay_init(&state, id);
 
   for (i = 0; i < n; ++i) {
     lcrq_put(&queue, handles[id], val);
-    work();
+    delay_exec(&state);
 
     do val = lcrq_get(&queue, handles[id]);
     while (val == (uint64_t) -1);
-    work();
+    delay_exec(&state);
   }
 
   return (int) val;
