@@ -15,7 +15,7 @@
 #endif
 
 #ifndef COV_THRESHOLD
-#define COV_THRESHOLD 0.01
+#define COV_THRESHOLD 0.02
 #endif
 
 static double times[NUM_ITERS];
