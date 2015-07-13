@@ -12,6 +12,13 @@ int cpumap(int i, int nprocs)
   return (i + 1) % 228;
 }
 
+#elif BIOU_COMPACT
+
+int cpumap(int i, int nprocs)
+{
+  return (i % 4) * 32 + i / 4;
+}
+
 #else
 
 int cpumap(int id, int nprocs)
