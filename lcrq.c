@@ -6,7 +6,7 @@
 #include "atomic.h"
 #include "hzdptr.h"
 
-#define RING_SIZE (1ull << 17)
+#define RING_SIZE (1ull << 12)
 
 inline int is_empty(uint64_t v) __attribute__ ((pure));
 inline uint64_t node_index(uint64_t i) __attribute__ ((pure));

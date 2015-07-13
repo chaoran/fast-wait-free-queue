@@ -11,9 +11,9 @@
 #define release_fence() __atomic_thread_fence(__ATOMIC_RELEASE)
 #define mfence() __atomic_thread_fence(__ATOMIC_SEQ_CST)
 
-#elif __IBM_C__
+#elif defined(__IBMC__)
 #define acquire_fence() __isync()
-#define release_fence() __lswync()
+#define release_fence() __lwsync()
 #define mfence() __sync()
 #define compare_and_swap(p, o, n) \
   __compare_and_swaplp((volatile long *) p, (long *) o, (long) n)
