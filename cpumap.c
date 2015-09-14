@@ -12,6 +12,13 @@ int cpumap(int i, int nprocs)
   return (i + 1) % 228;
 }
 
+#elif LES_SPREAD
+
+int cpumap(int i, int nprocs)
+{
+  return i % 4 * 12 + i / 4 % 12;
+}
+
 #else
 
 int cpumap(int id, int nprocs)
