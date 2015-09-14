@@ -2,10 +2,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include "align.h"
+#include "delay.h"
 #include "atomic.h"
 #include "hzdptr.h"
 
-#define RING_SIZE (1ull << 17)
+#define RING_SIZE (1ull << 12)
 
 inline int is_empty(uint64_t v) __attribute__ ((pure));
 inline uint64_t node_index(uint64_t i) __attribute__ ((pure));
@@ -175,6 +176,8 @@ alloc:
       goto alloc;
     }
   }
+
+  hzdptr_clear(&handle->hzdptr, 0);
 }
 
 static uint64_t lcrq_get(lcrq_t * q, lcrq_handle_t * handle) {
@@ -243,6 +246,8 @@ static uint64_t lcrq_get(lcrq_t * q, lcrq_handle_t * handle) {
       }
     }
   }
+
+  hzdptr_clear(&handle->hzdptr, 0);
 }
 
 #ifdef BENCHMARK
@@ -278,11 +283,16 @@ int test(int id)
   uint64_t val = id + 1;
   int i;
 
+  delay_t state;
+  delay_init(&state, id);
+
   for (i = 0; i < n; ++i) {
     lcrq_put(&queue, handles[id], val);
+    delay_exec(&state);
 
     do val = lcrq_get(&queue, handles[id]);
     while (val == (uint64_t) -1);
+    delay_exec(&state);
   }
 
   return (int) val;

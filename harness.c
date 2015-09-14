@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <sys/time.h>
+#include "event.h"
 #include "harness.h"
 
 #ifndef NUM_MEASS
@@ -15,7 +16,7 @@
 #endif
 
 #ifndef COV_THRESHOLD
-#define COV_THRESHOLD 0.01
+#define COV_THRESHOLD 0.02
 #endif
 
 static double times[NUM_ITERS];
@@ -26,6 +27,11 @@ static volatile int target;
 static int nprocs;
 static size_t * buffer;
 static int * results;
+
+#ifdef ENABLE_EVENTS
+char ** eventNames;
+size_t * eventResults;
+#endif
 
 static size_t elapsed_time(size_t ms)
 {
@@ -78,6 +84,22 @@ static size_t reduce_min(size_t val, int id)
   return min;
 }
 
+static size_t reduce_sum(size_t val, int id)
+{
+  buffer[id] = val;
+  pthread_barrier_wait(&barrier);
+
+  size_t sum = 0;
+  int i;
+
+  for (i = 0; i < nprocs; ++i) {
+    sum += buffer[i];
+  }
+
+  pthread_barrier_wait(&barrier);
+  return sum;
+}
+
 static int report_result(int id, int i, size_t ms)
 {
   ms = reduce_min(ms, id);
@@ -115,6 +137,17 @@ int harness_init(const char * name, int n)
   buffer = malloc(sizeof(size_t [nprocs]));
   results = malloc(sizeof(int [nprocs]));
 
+#ifdef ENABLE_EVENTS
+  int nevents = event_count();
+
+  if (nevents > 0) {
+    eventNames = malloc(sizeof(char * [nevents]));
+    eventResults = malloc(sizeof(size_t [nevents]));
+    event_names(eventNames);
+    event_init(nprocs);
+  }
+#endif
+
   return 0;
 }
 
@@ -122,7 +155,27 @@ int harness_exec(int id)
 {
   int i;
   int result;
+
+#ifdef ENABLE_EVENTS
+  long long * events;
+  int nevents = event_count();
+
+  if (nevents > 0) {
+    events = malloc(sizeof(long long [nevents]));
+
+    for (i = 0; i < nevents; ++i) {
+      events[i] = 0;
+    }
+
+    event_thread_init(id);
+  }
+#endif
+
   pthread_barrier_wait(&barrier);
+
+#ifdef ENABLE_EVENTS
+  if (nevents > 0) event_start(id);
+#endif
 
   for (i = 0; i < NUM_ITERS; ++i) {
     size_t ms = elapsed_time(0);
@@ -132,6 +185,19 @@ int harness_exec(int id)
     ms = elapsed_time(ms);
     if (report_result(id, i, ms)) break;
   }
+
+#ifdef ENABLE_EVENTS
+  if (nevents > 0) {
+    event_stop(id, events);
+
+    int i;
+    for (i = 0; i < nevents; ++i) {
+      eventResults[i] = reduce_sum(events[i], id);
+    }
+
+    free(events);
+  }
+#endif
 
   results[id] = result;
   return 0;
@@ -163,6 +229,14 @@ int harness_exit()
       iter - NUM_MEASS + 2, iter + 1, cov);
   printf("  Number of measurements: %d\n", NUM_MEASS);
   printf("  Mean of elapsed time: %.2f ms\n", mean);
+
+#ifdef ENABLE_EVENTS
+  int i;
+  for (i = 0; i < event_count(); ++i) {
+    printf("  Event: %s %ld\n", eventNames[i], eventResults[i]);
+  }
+#endif
+
   printf("===========================================\n");
 
   pthread_barrier_destroy(&barrier);

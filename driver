@@ -3,7 +3,7 @@
 T90=( \
   6.314 2.920 2.353 2.132 2.015 1.943 1.895 1.860 1.833 1.812 \
   1.796 1.782 1.771 1.761 1.753 1.746 1.740 1.734 1.729 1.725 \
-  1.721 1.717 1.714 1.711 1.708 1.706 1.703 1.701 1.699 .1697 \
+  1.721 1.717 1.714 1.711 1.708 1.706 1.703 1.701 1.699 1.697 \
   )
 
 T95=( \
@@ -35,9 +35,9 @@ while true; do
   STD=$(echo "sqrt ($STD / $i)" | bc -l)
 
   if (( $option == 95 )); then
-    ERR=$(echo "${T95[$i]} * $STD" | bc -l)
+    ERR=$(echo "${T95[$i]} * $STD / sqrt($N)" | bc -l)
   else
-    ERR=$(echo "${T90[$i]} * $STD" | bc -l)
+    ERR=$(echo "${T90[$i]} * $STD / sqrt($N)" | bc -l)
   fi
 
   PRECISION=$(echo "$ERR / $MEAN" | bc -l)
@@ -45,7 +45,7 @@ while true; do
   printf '#%-2d %.2f %.2f %.4f %.2f %.3f\n' \
     $N $TIME $MEAN $STD $ERR $PRECISION
 
-  if (($N >= 10 || $N > 5 && $(echo "$PRECISION < 0.02" | bc) == 1)); then
+  if (($N >= 30 || $N >= 10 && $(echo "$PRECISION < 0.02" | bc) == 1)); then
     break
   else
     i=$N

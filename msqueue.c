@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include "align.h"
+#include "delay.h"
 #include "atomic.h"
 #include "hzdptr.h"
 
@@ -119,13 +120,17 @@ void thread_exit(int id)
 int test(int id)
 {
   void * val = (void *) (intptr_t) (id + 1);
-  int i;
+  delay_t state;
+  delay_init(&state, id);
 
+  int i;
   for (i = 0; i < n; ++i) {
     msqueue_put(&msqueue, handles[id], val);
+    delay_exec(&state);
 
     do val = msqueue_get(&msqueue, handles[id]);
     while (val == (void *) -1);
+    delay_exec(&state);
   }
 
   return (int) (intptr_t) val;

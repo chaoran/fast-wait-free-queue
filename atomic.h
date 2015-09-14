@@ -1,7 +1,7 @@
 #ifndef ATOMIC_H
 #define ATOMIC_H
 
-#if defined(__GNUC__) && __GNUC__ >= 4 && __GNUC_MINOR__ >= 7
+#if defined(__GNUC__) && __GNUC__ >= 4 && __GNUC_MINOR__ > 7
 #define compare_and_swap(ptr, expected, desired) \
   __atomic_compare_exchange_n(ptr, expected, desired, 0, \
       __ATOMIC_RELAXED, __ATOMIC_RELAXED)
@@ -11,9 +11,9 @@
 #define release_fence() __atomic_thread_fence(__ATOMIC_RELEASE)
 #define mfence() __atomic_thread_fence(__ATOMIC_SEQ_CST)
 
-#elif __IBM_C__
+#elif defined(__IBMC__)
 #define acquire_fence() __isync()
-#define release_fence() __lswync()
+#define release_fence() __lwsync()
 #define mfence() __sync()
 #define compare_and_swap(p, o, n) \
   __compare_and_swaplp((volatile long *) p, (long *) o, (long) n)
@@ -22,6 +22,26 @@
 
 #else /** Non-GCC or old GCC. */
 #if defined(__x86_64__) || defined(_M_X64_)
+#define release_fence() __asm__("":::"memory")
+#define acquire_fence() __asm__("":::"memory")
+#define mfence() __sync_synchronize()
+#define fetch_and_add(ptr, val) __sync_fetch_and_add(ptr, val)
+#define swap(ptr, val) __sync_lock_test_and_set(ptr, val)
+
+static inline int
+_compare_and_swap(void ** ptr, void ** expected, void * desired) {
+  void * oldval = *expected;
+  void * newval = __sync_val_compare_and_swap(ptr, oldval, desired);
+
+  if (newval == oldval) {
+    return 1;
+  } else {
+    *expected = newval;
+    return 0;
+  }
+}
+#define compare_and_swap(ptr, expected, desired) \
+  _compare_and_swap((void **) (ptr), (void **) (expected), (void *) (desired))
 
 #else
 #define acquire_fence() __asm__("isync":::"memory")
