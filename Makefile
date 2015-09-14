@@ -1,5 +1,6 @@
 TESTS = fifo fifo0 lcrq ccqueue msqueue faa
 
+CC = gcc
 CFLAGS = -g -O3 -DBENCHMARK -pthread
 LDLIBS = -lpthread -lm
 
