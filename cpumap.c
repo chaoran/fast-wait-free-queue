@@ -16,7 +16,7 @@ int cpumap(int i, int nprocs)
 
 int cpumap(int i, int nprocs)
 {
-  return (i % 4) * 32 + i / 4;
+  return (i % 2) * 32 + i / 2;
 }
 
 #else
