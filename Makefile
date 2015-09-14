@@ -1,4 +1,4 @@
-TESTS = fifo lcrq ccqueue msqueue faa clh
+TESTS = fifo lcrq ccqueue msqueue faa
 
 CFLAGS = -g -O3 -DBENCHMARK -pthread
 LDLIBS = -lpthread -lm
@@ -11,4 +11,3 @@ msqueue lcrq: hzdptr.c xxhash.c
 
 clean:
 	rm -f $(TESTS) *.o
-
