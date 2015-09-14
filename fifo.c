@@ -268,21 +268,7 @@ static void help_deq(queue_t * q, handle_t * th, deq_t * deq, node_t * Hn)
 
   if (id <= 0) return;
 
-  while (deq->id == id) {
-    if (idx != old) {
-      cell_t * c = find_cell(&Hn, idx, th);
-      deq_t * cd = c->deq;
-
-      if (c->val == TOP ||
-          cd == BOT && CAS(&c->deq, &cd, deq) || cd == deq) {
-        CAS(&deq->id, &id, -idx);
-        break;
-      }
-
-      old = idx;
-      if (idx >= i) i = idx + 1;
-    }
-
+  while (ACQUIRE(&deq->id) == id) {
     node_t * h = Hn;
     for (; new == 0 && idx == old; ++i) {
       cell_t * c = find_cell(&h, i, th);
@@ -290,7 +276,7 @@ static void help_deq(queue_t * q, handle_t * th, deq_t * deq, node_t * Hn)
       deq_t * cd = c->deq;
 
       if (v == BOT || v != TOP && cd == BOT) new = i;
-      else idx = deq->idx;
+      else idx = ACQUIRE(&deq->idx);
     }
 
     if (idx == old) {
@@ -299,6 +285,18 @@ static void help_deq(queue_t * q, handle_t * th, deq_t * deq, node_t * Hn)
     }
 
     if (idx < 0) break;
+
+    cell_t * c = find_cell(&Hn, idx, th);
+    deq_t * cd = c->deq;
+
+    if (c->val == TOP ||
+        cd == BOT && CAS(&c->deq, &cd, deq) || cd == deq) {
+      CAS(&deq->id, &id, -idx);
+      break;
+    }
+
+    old = idx;
+    if (idx >= i) i = idx + 1;
   }
 }
 
