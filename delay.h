@@ -16,7 +16,7 @@ static void delay_exec(delay_t * state)
   lrand48_r(state, &n);
 
   int j;
-  for (j = 0; j < n % 100; ++j) {
+  for (j = 50; j < 50 + n % 100; ++j) {
     __asm__ ("nop");
   }
 }
