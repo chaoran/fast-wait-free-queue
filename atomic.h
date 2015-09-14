@@ -41,7 +41,7 @@ _compare_and_swap(void ** ptr, void ** expected, void * desired) {
   }
 }
 #define compare_and_swap(ptr, expected, desired) \
-  _compare_and_swap((void **) ptr, (void **) expected, (void *) desired)
+  _compare_and_swap((void **) (ptr), (void **) (expected), (void *) (desired))
 
 #else
 #define acquire_fence() __asm__("isync":::"memory")
