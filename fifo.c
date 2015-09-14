@@ -7,9 +7,13 @@
 #define N ((1 << 10) - 2)
 #define BOT ((void *) 0)
 #define TOP ((void *)-1)
-#define MAX_PATIENCE 100
+
 #define MAX_GARBAGE 100
 #define MAX_SPIN 1000
+
+#ifndef MAX_PATIENCE
+#define MAX_PATIENCE 100
+#endif
 
 typedef struct CACHE_ALIGNED {
   long volatile id;
