@@ -58,10 +58,6 @@
 
 #define FAA __sync_fetch_and_add
 #define FAAcs __sync_fetch_and_add
-#define acquire_fence() __asm__("":::"memory")
-#define mfence() __sync_synchronize()
-#define fetch_and_add(ptr, val) __sync_fetch_and_add(ptr, val)
-#define swap(ptr, val) __sync_lock_test_and_set(ptr, val)
 
 static inline int
 _compare_and_swap(void ** ptr, void ** expected, void * desired) {
@@ -94,4 +90,11 @@ static inline void * _acquire(void * volatile * p) {
 
 #endif
 #endif
+
+#if defined(__x86_64__) || defined(_M_X64_)
+#define PAUSE() __asm__ ("pause")
+#else
+#define PAUSE()
+#endif
+
 #endif /* end of include guard: PRIMITIVES_H */
