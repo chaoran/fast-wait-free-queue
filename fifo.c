@@ -181,8 +181,8 @@ static int enq_fast(queue_t * q, handle_t * th, void * v, long * id)
 static void enq_slow(queue_t * q, handle_t * th, void * v, long id)
 {
   enq_t * enq = &th->req.enq;
-  RELEASE(&enq->id, id);
   RELEASE(&enq->val, v);
+  RELEASE(&enq->id, id);
 
   node_t * tail = th->Tn;
 
