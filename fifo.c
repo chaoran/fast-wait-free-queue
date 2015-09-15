@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 #include "align.h"
@@ -7,9 +8,13 @@
 #define N ((1 << 10) - 2)
 #define BOT ((void *) 0)
 #define TOP ((void *)-1)
-#define MAX_PATIENCE 100
+
 #define MAX_GARBAGE 100
 #define MAX_SPIN 1000
+
+#ifndef MAX_PATIENCE
+#define MAX_PATIENCE 100
+#endif
 
 typedef struct CACHE_ALIGNED {
   long volatile id;
@@ -88,6 +93,7 @@ static node_t * update(node_t * volatile * pPn, node_t * cur,
     if (!CAScs(pPn, &ptr, cur)) {
       if (ptr->id < cur->id) cur = ptr;
     }
+
     node_t * Hp = *pHp;
     if (Hp && Hp->id < cur->id) cur = Hp;
   }
@@ -264,21 +270,7 @@ static void help_deq(queue_t * q, handle_t * th, deq_t * deq, node_t * Hn)
 
   if (id <= 0) return;
 
-  while (deq->id == id) {
-    if (idx != old) {
-      cell_t * c = find_cell(&Hn, idx, th);
-      deq_t * cd = c->deq;
-
-      if (c->val == TOP ||
-          cd == BOT && CAS(&c->deq, &cd, deq) || cd == deq) {
-        CAS(&deq->id, &id, -idx);
-        break;
-      }
-
-      old = idx;
-      if (idx >= i) i = idx + 1;
-    }
-
+  while (ACQUIRE(&deq->id) == id) {
     node_t * h = Hn;
     for (; new == 0 && idx == old; ++i) {
       cell_t * c = find_cell(&h, i, th);
@@ -286,7 +278,7 @@ static void help_deq(queue_t * q, handle_t * th, deq_t * deq, node_t * Hn)
       deq_t * cd = c->deq;
 
       if (v == BOT || v != TOP && cd == BOT) new = i;
-      else idx = deq->idx;
+      else idx = ACQUIRE(&deq->idx);
     }
 
     if (idx == old) {
@@ -294,7 +286,20 @@ static void help_deq(queue_t * q, handle_t * th, deq_t * deq, node_t * Hn)
       if (idx >= new) new = 0;
     }
 
+    assert(idx != old);
     if (idx < 0) break;
+
+    cell_t * c = find_cell(&Hn, idx, th);
+    deq_t * cd = c->deq;
+
+    if (c->val == TOP ||
+        cd == BOT && CAS(&c->deq, &cd, deq) || cd == deq) {
+      CAS(&deq->id, &id, -idx);
+      break;
+    }
+
+    old = idx;
+    if (idx >= i) i = idx + 1;
   }
 }
 
@@ -312,6 +317,7 @@ static void * deq_fast(queue_t * q, handle_t * th, long * id)
       help_deq(q, th, &peer->req.deq, ACQUIRE(&peer->Hn));
       th->peer.deq = peer->next;
 
+      assert(c->deq == TOP);
       return v;
     }
   }
@@ -335,6 +341,7 @@ static void * deq_slow(queue_t * q, handle_t * th, long id)
 
   cell_t * c = find_cell(&th->Hn, i, th);
   void * val = c->val;
+  assert(c->deq == deq || val == TOP);
   return val == TOP ? BOT : val;
 }
 
