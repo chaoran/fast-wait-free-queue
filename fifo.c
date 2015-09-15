@@ -234,7 +234,7 @@ static void * help_enq(queue_t * q, handle_t * th, cell_t * c, long i)
 
       if (id > 0 && id <= i) {
         long Ti = q->Ti;
-        while (Ti <= i && !CAS(&q->Ti, &Ti, i+1));
+        while (Ti <= i && !CAS(&q->Ti, &Ti, i + 1));
 
         if (CAS(&c->enq, &e, pe)) e = pe;
         th->peer.enq = (e == pe ? ph->next : ph);
@@ -337,7 +337,7 @@ static void * deq_slow(queue_t * q, handle_t * th, long id)
   long i = deq->idx;
 
   long Hi = q->Hi;
-  while (Hi <= i && !CAS(&q->Hi, &Hi, i));
+  while (Hi <= i && !CAS(&q->Hi, &Hi, i + 1));
 
   cell_t * c = find_cell(&th->Hn, i, th);
   void * val = c->val;
@@ -372,8 +372,8 @@ void queue_init(queue_t * q, long width)
   q->Ri = 0;
   q->Rn = new_node(0);
 
-  q->Ti = 0;
-  q->Hi = 0;
+  q->Ti = 1;
+  q->Hi = 1;
 }
 
 void queue_register(queue_t * q, handle_t * th)
