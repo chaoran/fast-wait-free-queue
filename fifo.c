@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 #include "align.h"
@@ -92,6 +93,7 @@ static node_t * update(node_t * volatile * pPn, node_t * cur,
     if (!CAScs(pPn, &ptr, cur)) {
       if (ptr->id < cur->id) cur = ptr;
     }
+
     node_t * Hp = *pHp;
     if (Hp && Hp->id < cur->id) cur = Hp;
   }
@@ -284,6 +286,7 @@ static void help_deq(queue_t * q, handle_t * th, deq_t * deq, node_t * Hn)
       if (idx >= new) new = 0;
     }
 
+    assert(idx != old);
     if (idx < 0) break;
 
     cell_t * c = find_cell(&Hn, idx, th);
@@ -314,6 +317,7 @@ static void * deq_fast(queue_t * q, handle_t * th, long * id)
       help_deq(q, th, &peer->req.deq, ACQUIRE(&peer->Hn));
       th->peer.deq = peer->next;
 
+      assert(c->deq == TOP);
       return v;
     }
   }
@@ -337,6 +341,7 @@ static void * deq_slow(queue_t * q, handle_t * th, long id)
 
   cell_t * c = find_cell(&th->Hn, i, th);
   void * val = c->val;
+  assert(c->deq == deq || val == TOP);
   return val == TOP ? BOT : val;
 }
 
