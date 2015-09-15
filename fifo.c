@@ -65,7 +65,7 @@ static inline void * spin(void * volatile * p) {
 
   while (!v && patience-- > 0) {
     v = *p;
-    asm ("pause");
+    PAUSE();
   }
 
   return v;
