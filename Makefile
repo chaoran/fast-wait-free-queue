@@ -13,7 +13,7 @@ fifo0.o: fifo.c
 haswell: CFLAGS += -DGUADALUPE_COMPACT
 
 mic: CC = /usr/linux-k1om-4.7/bin/x86_64-k1om-linux-gcc
-mic: $(filter-out lcrq,$(TESTS))
+mic biou: $(filter-out lcrq,$(TESTS))
 
 $(TESTS): verify.o cpumap.o main.o harness.o
 
