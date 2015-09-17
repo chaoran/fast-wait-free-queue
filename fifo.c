@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 #include "align.h"
@@ -102,12 +103,12 @@ static node_t * update(node_t * volatile * pPn, node_t * cur,
 }
 
 static void cleanup(queue_t * q, handle_t * th) {
-  long Ri = q->Ri;
+  long oid = q->Ri;
   node_t * new = th->Hn;
 
-  if (Ri == -1) return;
-  if (new->id - Ri < MAX_GARBAGE) return;
-  if (!CASar(&q->Ri, &Ri, -1)) return;
+  if (oid == -1) return;
+  if (new->id - oid < MAX_GARBAGE) return;
+  if (!CASar(&q->Ri, &oid, -1)) return;
 
   node_t * old = q->Rn;
   handle_t * ph = th;
@@ -120,15 +121,21 @@ static void cleanup(queue_t * q, handle_t * th) {
     new = update(&ph->Tn, new, &ph->Hp);
 
     ph = ph->next;
-  } while (new != old && ph != th);
+  } while (new->id > oid && ph != th);
 
-  if (new != old) q->Rn = new;
-  RELEASE(&q->Ri, new->id);
+  long nid = new->id;
 
-  while (old != new) {
-    node_t * tmp = old->next;
-    free(old);
-    old = tmp;
+  if (nid <= oid) {
+    q->Ri = oid;
+  } else {
+    q->Rn = new;
+    RELEASE(&q->Ri, nid);
+
+    while (old != new) {
+      node_t * tmp = old->next;
+      free(old);
+      old = tmp;
+    }
   }
 }
 
@@ -160,6 +167,7 @@ static cell_t * find_cell(node_t * volatile * p, long i, handle_t * th) {
     c = n;
   }
 
+  assert(c->id == i / N);
   *p = c;
   return &c->cells[i % N];
 }
@@ -262,15 +270,16 @@ static void * help_enq(queue_t * q, handle_t * th, cell_t * c, long i)
 
 static void help_deq(queue_t * q, handle_t * th, deq_t * deq, node_t * Hn)
 {
-  long id = ACQUIRE(&deq->id),
-       i = id + 1,
-       old = -id,
-       new = 0,
-       idx = ACQUIRE(&deq->idx);
-
+  long id = ACQUIRE(&deq->id);
   if (id <= 0) return;
 
-  while (ACQUIRE(&deq->id) == id) {
+  th->Hp = Hn;
+  FENCE();
+
+  long idx = deq->idx;
+  long i = id + 1, old = -id, new = 0;
+
+  while (deq->id == id) {
     node_t * h = Hn;
     for (; new == 0 && idx == old; ++i) {
       cell_t * c = find_cell(&h, i, th);
@@ -282,7 +291,7 @@ static void help_deq(queue_t * q, handle_t * th, deq_t * deq, node_t * Hn)
     }
 
     if (idx == old) {
-      if (CAS(&deq->idx, &idx, new)) idx = new;
+      if (CASra(&deq->idx, &idx, new)) idx = new;
       if (idx >= new) new = 0;
     }
 

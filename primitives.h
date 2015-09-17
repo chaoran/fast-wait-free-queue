@@ -37,6 +37,11 @@
     __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)
 
 /**
+ * A memory fence to ensure sequential consistency.
+ */
+#define FENCE() __atomic_thread_fence(__ATOMIC_SEQ_CST)
+
+/**
  * An atomic store.
  */
 #define STORE(ptr, val) __atomic_store_n(ptr, val, __ATOMIC_RELAXED)
