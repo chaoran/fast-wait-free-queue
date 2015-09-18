@@ -254,7 +254,7 @@ static uint64_t lcrq_get(lcrq_t * q, lcrq_handle_t * handle) {
 #include <stdint.h>
 
 static lcrq_t queue;
-static int n = 10000000;
+static int n = NUM_OPS;
 static lcrq_handle_t ** handles;
 
 int init(int nprocs)
