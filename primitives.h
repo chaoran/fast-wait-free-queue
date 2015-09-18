@@ -92,6 +92,7 @@ static inline void * _acquire(void * volatile * p) {
   __asm__("":::"memory"); \
   *p = v; \
 } while (0)
+#define FENCE() __sync_synchronize()
 
 #endif
 #endif
