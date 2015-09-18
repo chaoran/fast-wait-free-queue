@@ -94,7 +94,7 @@ void * msqueue_get(msqueue_t * q, handle_t * handle)
 #include <stdint.h>
 
 static msqueue_t msqueue;
-static int n = 10000000;
+static int n = NUM_OPS;
 static handle_t ** handles;
 
 int init(int nprocs)

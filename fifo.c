@@ -418,7 +418,7 @@ void queue_register(queue_t * q, handle_t * th)
 
 static queue_t queue;
 static handle_t ** handles;
-static int n = 10000000;
+static int n = NUM_OPS;
 
 int init(int nprocs)
 {

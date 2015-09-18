@@ -19,6 +19,10 @@
 #define COV_THRESHOLD 0.02
 #endif
 
+#ifndef NUM_OPS
+#define NUM_OPS 10000000
+#endif
+
 static double times[NUM_ITERS];
 static double means[NUM_ITERS];
 static double covs[NUM_ITERS];

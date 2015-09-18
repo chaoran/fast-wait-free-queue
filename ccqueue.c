@@ -94,7 +94,7 @@ void * ccqueue_deq(ccqueue_t * queue, handle_t * handle)
 
 static ccqueue_t queue;
 static handle_t ** handles;
-static int n = 10000000;
+static int n = NUM_OPS;
 
 int init(int nprocs)
 {

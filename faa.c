@@ -3,7 +3,7 @@
 #include "delay.h"
 #include "atomic.h"
 
-static int n = 10000000;
+static int n = NUM_OPS;
 
 int init(int nprocs) {
   n /= nprocs;
