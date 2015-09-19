@@ -39,6 +39,7 @@ int verify(int nprocs, int * results)
   return ret;
 }
 
+#ifdef BENCH_VERIFY
 int bench(int nprocs, int id, void * q, void * th)
 {
   void * val = (void *) (intptr_t) (id + 1);
@@ -57,3 +58,22 @@ int bench(int nprocs, int id, void * q, void * th)
 
   return (int) (intptr_t) val;
 }
+#else
+int bench(int nprocs, int id, void * q, void * th)
+{
+  void * val = (void *) (intptr_t) (id + 1);
+  delay_t state;
+  delay_init(&state, id);
+
+  int i;
+  for (i = 0; i < _nops / nprocs; ++i) {
+    enqueue(q, th, val);
+    delay_exec(&state);
+
+    dequeue(q, th);
+    delay_exec(&state);
+  }
+
+  return (int) (intptr_t) val;
+}
+#endif
