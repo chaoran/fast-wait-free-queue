@@ -250,52 +250,29 @@ static uint64_t lcrq_get(lcrq_t * q, lcrq_handle_t * handle) {
   hzdptr_clear(&handle->hzdptr, 0);
 }
 
-#ifdef BENCHMARK
-#include <stdint.h>
-
-static lcrq_t queue;
-static int n = NUM_OPS;
-static lcrq_handle_t ** handles;
-
-int init(int nprocs)
+void * init(int nprocs)
 {
-  lcrq_init(&queue);
-  handles = malloc(sizeof(lcrq_handle_t * [nprocs]));
-  n /= nprocs;
-  return n;
+  lcrq_t * q = align_malloc(sizeof(lcrq_t), PAGE_SIZE);
+  lcrq_init(q);
+  return q;
 }
 
-void thread_init(int id)
+void * thread_init(int nprocs, int id, void * q)
 {
-  extern int NPROCS;
-  handles[id] = malloc(sizeof(lcrq_handle_t) + hzdptr_size(NPROCS, 1));
-  hzdptr_init(&handles[id]->hzdptr, NPROCS, 1);
+  size_t size = sizeof(lcrq_handle_t) + hzdptr_size(nprocs, 1);
+  lcrq_handle_t * th = align_malloc(size, PAGE_SIZE);
+  hzdptr_init(&th->hzdptr, nprocs, 1);
+  return th;
 }
 
-void thread_exit(int id)
+void enqueue(void * q, void * th, void * val)
 {
-  hzdptr_exit(&handles[id]->hzdptr);
-  free(handles[id]);
+  lcrq_put((lcrq_t *) q, (lcrq_handle_t *) th, (uint64_t) val);
 }
 
-int test(int id)
+void * dequeue(void * q, void * th)
 {
-  uint64_t val = id + 1;
-  int i;
-
-  delay_t state;
-  delay_init(&state, id);
-
-  for (i = 0; i < n; ++i) {
-    lcrq_put(&queue, handles[id], val);
-    delay_exec(&state);
-
-    do val = lcrq_get(&queue, handles[id]);
-    while (val == (uint64_t) -1);
-    delay_exec(&state);
-  }
-
-  return (int) val;
+  return (void *) lcrq_get((lcrq_t *) q, (lcrq_handle_t *) th);
 }
 
-#endif
+void * EMPTY = (void *) -1;
