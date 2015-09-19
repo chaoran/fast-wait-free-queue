@@ -3,34 +3,28 @@
 #include "delay.h"
 #include "atomic.h"
 
-static int n = NUM_OPS;
+void * init(int nprocs) { return NULL; }
 
-int init(int nprocs) {
-  n /= nprocs;
-  return n;
+void * thread_init(int nprocs, int id, void * q) {
+  void ** tid = malloc(sizeof(void *));
+  *tid = (void *) (size_t) (id + 1);
+  return tid;
 }
 
-void thread_init(int id, void * args) {}
+static volatile long P DOUBLE_CACHE_ALIGNED = 0;
+static volatile long C DOUBLE_CACHE_ALIGNED = 0;
 
-void thread_exit(int id, void * args) {}
-
-int test(int id)
+void enqueue(void * q, void * th, void * val)
 {
-  int i, j;
-  static volatile long P DOUBLE_CACHE_ALIGNED = 0;
-  static volatile long C DOUBLE_CACHE_ALIGNED = 0;
-  delay_t state;
-  delay_init(&state, id);
-
-  for (i = 0; i < n; ++i) {
-    fetch_and_add(&P, 1);
-    delay_exec(&state);
-
-    fetch_and_add(&C, 1);
-    delay_exec(&state);
-  }
-
-  return id + 1;
+  fetch_and_add(&P, 1);
 }
+
+void * dequeue(void * q, void * th)
+{
+  fetch_and_add(&C, 1);
+  return *(void **) th;
+}
+
+void * EMPTY = NULL;
 
 #endif

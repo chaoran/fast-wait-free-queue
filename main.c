@@ -24,9 +24,7 @@ static void * thread_main(void * id_)
   int id = (int) (intptr_t) id_;
 
   thread_pin(id);
-  thread_init(id);
   harness_exec(id);
-  thread_exit(id);
 
   return NULL;
 }

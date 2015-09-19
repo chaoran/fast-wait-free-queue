@@ -90,48 +90,28 @@ void * ccqueue_deq(ccqueue_t * queue, handle_t * handle)
   return node ? node->data : (void *) -1;
 }
 
-#ifdef BENCHMARK
-
-static ccqueue_t queue;
-static handle_t ** handles;
-static int n = NUM_OPS;
-
-int init(int nprocs)
+void * init(int nprocs)
 {
-  ccqueue_init(&queue);
-  handles = malloc(sizeof(handle_t * [nprocs]));
-
-  n /= nprocs;
-  return n;
+  ccqueue_t * q = align_malloc(sizeof(ccqueue_t), PAGE_SIZE);
+  ccqueue_init(q);
+  return q;
 }
 
-void thread_init(int id)
+void * thread_init(int nprocs, int id, void * q)
 {
-  handle_t * handle = malloc(sizeof(handle_t));
-  handles[id] = handle;
-  ccqueue_handle_init(&queue, handle);
+  handle_t * th = align_malloc(sizeof(handle_t), PAGE_SIZE);
+  ccqueue_handle_init((ccqueue_t *) q, th);
+  return th;
 }
 
-void thread_exit(int id, void * args) {}
-
-int test(int id)
+void enqueue(void * q, void * th, void * val)
 {
-  intptr_t val = id + 1;
-  handle_t * handle = handles[id];
-  delay_t state;
-  delay_init(&state, id);
-
-  int i;
-  for (i = 0; i < n; ++i) {
-    ccqueue_enq(&queue, handle, (void *) val);
-    delay_exec(&state);
-
-    do val = (intptr_t) ccqueue_deq(&queue, handle);
-    while (val == -1);
-    delay_exec(&state);
-  }
-
-  return (int) val;
+  ccqueue_enq((ccqueue_t *) q, (handle_t *) th, val);
 }
 
-#endif
+void * dequeue(void * q, void * th)
+{
+  return ccqueue_deq((ccqueue_t *) q, (handle_t *) th);
+}
+
+void * EMPTY = (void *) -1;

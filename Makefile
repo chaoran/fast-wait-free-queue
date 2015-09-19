@@ -15,7 +15,7 @@ haswell: CFLAGS += -DGUADALUPE_COMPACT
 mic: CC = /usr/linux-k1om-4.7/bin/x86_64-k1om-linux-gcc
 mic biou: $(filter-out lcrq,$(TESTS))
 
-$(TESTS): verify.o cpumap.o main.o harness.o
+$(TESTS): cpumap.o main.o harness.o bench.o
 
 msqueue lcrq: hzdptr.c xxhash.c
 

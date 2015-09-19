@@ -19,9 +19,14 @@
 #define COV_THRESHOLD 0.02
 #endif
 
-#ifndef NUM_OPS
-#define NUM_OPS 10000000
-#endif
+extern void * init(int nprocs);
+extern void * thread_init(int nprocs, int id, void * global);
+
+extern int _nops;
+extern int bench(int nprocs, int id, void * global, void * local);
+extern int verify(int nprocs, int * results);
+
+extern int cpumap(int id, int nprocs);
 
 static double times[NUM_ITERS];
 static double means[NUM_ITERS];
@@ -31,6 +36,8 @@ static volatile int target;
 static int nprocs;
 static size_t * buffer;
 static int * results;
+static void * global;
+static void * local;
 
 #ifdef ENABLE_EVENTS
 char ** eventNames;
@@ -135,11 +142,13 @@ int harness_init(const char * name, int n)
   printf("===========================================\n");
   printf("  Benchmark: %s\n", name);
   printf("  Number of processors: %d\n", nprocs);
-  printf("  Input size: %d\n", init(nprocs));
+  printf("  Input size: %d\n", _nops);
 
   pthread_barrier_init(&barrier, NULL, nprocs);
   buffer = malloc(sizeof(size_t [nprocs]));
   results = malloc(sizeof(int [nprocs]));
+
+  global = init(nprocs);
 
 #ifdef ENABLE_EVENTS
   int nevents = event_count();
@@ -175,6 +184,8 @@ int harness_exec(int id)
   }
 #endif
 
+  void * local = thread_init(nprocs, id, global);
+
   pthread_barrier_wait(&barrier);
 
 #ifdef ENABLE_EVENTS
@@ -183,7 +194,7 @@ int harness_exec(int id)
 
   for (i = 0; i < NUM_ITERS; ++i) {
     size_t ms = elapsed_time(0);
-    result = test(id);
+    result = bench(nprocs, id, global, local);
     pthread_barrier_wait(&barrier);
 
     ms = elapsed_time(ms);

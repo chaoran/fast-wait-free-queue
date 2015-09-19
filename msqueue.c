@@ -90,51 +90,29 @@ void * msqueue_get(msqueue_t * q, handle_t * handle)
   return data;
 }
 
-#ifdef BENCHMARK
-#include <stdint.h>
-
-static msqueue_t msqueue;
-static int n = NUM_OPS;
-static handle_t ** handles;
-
-int init(int nprocs)
+void * init(int nprocs)
 {
-  msqueue_init(&msqueue);
-  handles = malloc(sizeof(handle_t * [nprocs]));
-  n /= nprocs;
-  return n;
+  msqueue_t * q = align_malloc(sizeof(msqueue_t), PAGE_SIZE);
+  msqueue_init(q);
+  return q;
 }
 
-void thread_init(int id) {
-  extern int NPROCS;
-  handles[id] = malloc(sizeof(handle_t) + hzdptr_size(NPROCS, 2));
-  hzdptr_init(&handles[id]->hzd, NPROCS, 2);
+void * thread_init(int nprocs, int id, void * q)
+{
+  size_t size = sizeof(handle_t) + hzdptr_size(nprocs, 2);
+  handle_t * th = align_malloc(size, PAGE_SIZE);
+  hzdptr_init(&th->hzd, nprocs, 2);
+  return th;
 };
 
-void thread_exit(int id)
+void enqueue(void * q, void * th, void * val)
 {
-  hzdptr_exit(&handles[id]->hzd);
-  free(handles[id]);
-};
-
-int test(int id)
-{
-  void * val = (void *) (intptr_t) (id + 1);
-  delay_t state;
-  delay_init(&state, id);
-
-  int i;
-  for (i = 0; i < n; ++i) {
-    msqueue_put(&msqueue, handles[id], val);
-    delay_exec(&state);
-
-    do val = msqueue_get(&msqueue, handles[id]);
-    while (val == (void *) -1);
-    delay_exec(&state);
-  }
-
-  return (int) (intptr_t) val;
+  msqueue_put((msqueue_t *) q, (handle_t *) th, val);
 }
 
-#endif
+void * dequeue(void * q, void * th)
+{
+  return msqueue_get((msqueue_t *) q, (handle_t *) th);
+}
 
+void * EMPTY = (void *) -1;

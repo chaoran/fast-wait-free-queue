@@ -215,7 +215,7 @@ static void enq_slow(queue_t * q, handle_t * th, void * v, long id)
   } while (enq->id > 0);
 }
 
-void enqueue(queue_t * q, handle_t * th, void * v)
+void wfenq(queue_t * q, handle_t * th, void * v)
 {
   th->Hp = th->Tn;
 
@@ -356,7 +356,7 @@ static void * deq_slow(queue_t * q, handle_t * th, long id)
   return val == TOP ? BOT : val;
 }
 
-void * dequeue(queue_t * q, handle_t * th)
+void * wfdeq(queue_t * q, handle_t * th)
 {
   th->Hp = th->Hn;
 
@@ -378,7 +378,7 @@ void * dequeue(queue_t * q, handle_t * th)
   return v;
 }
 
-void queue_init(queue_t * q, long width)
+void wfinit(queue_t * q, long width)
 {
   q->Ri = 0;
   q->Rn = new_node(0);
@@ -387,7 +387,7 @@ void queue_init(queue_t * q, long width)
   q->Hi = 1;
 }
 
-void queue_register(queue_t * q, handle_t * th)
+void wfregister(queue_t * q, handle_t * th)
 {
   th->Tn = q->Rn;
   th->Hn = q->Rn;
@@ -421,48 +421,28 @@ void queue_register(queue_t * q, handle_t * th)
   th->peer.deq = th->next;
 }
 
-#ifdef BENCHMARK
-#include <stdint.h>
-
-static queue_t queue;
-static handle_t ** handles;
-static int n = NUM_OPS;
-
-int init(int nprocs)
+void * init(int nprocs)
 {
-  queue_init(&queue, nprocs);
-  handles = malloc(sizeof(handle_t * [nprocs]));
-
-  n /= nprocs;
-  return n;
+  queue_t * q = align_malloc(sizeof(queue_t), PAGE_SIZE);
+  wfinit(q, nprocs);
+  return q;
 }
 
-void thread_init(int id)
+void * thread_init(int nprocs, int id, void * q)
 {
-  handle_t * handle = malloc(sizeof(handle_t));
-  handles[id] = handle;
-  queue_register(&queue, handle);
+  handle_t * th = align_malloc(sizeof(handle_t), PAGE_SIZE);
+  wfregister((queue_t *) q, th);
+  return th;
 }
 
-void thread_exit(int id) {}
-
-int test(int id)
+void enqueue(void * q, void * th, void * val)
 {
-  void * val = (void *) (intptr_t) (id + 1);
-  delay_t state;
-  delay_init(&state, id);
-
-  int i;
-  for (i = 0; i < n; ++i) {
-    enqueue(&queue, handles[id], val);
-    delay_exec(&state);
-
-    do val = dequeue(&queue, handles[id]);
-    while (val == BOT);
-    delay_exec(&state);
-  }
-
-  return (int) (intptr_t) val;
+  wfenq((queue_t *) q, (handle_t *) th, val);
 }
 
-#endif
+void * dequeue(void * q, void * th)
+{
+  return wfdeq((queue_t *) q, (handle_t *) th);
+}
+
+void * EMPTY = BOT;
