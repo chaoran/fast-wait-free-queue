@@ -110,21 +110,29 @@ static void cleanup(queue_t * q, handle_t * th) {
 
   node_t * old = q->Rn;
   handle_t * ph = th;
+  handle_t * phs[256];
+  int i = 0;
 
   do {
-    node_t * Hp = ph->Hp;
+    node_t * Hp = ACQUIRE(&ph->Hp);
     if (Hp && Hp->id < new->id) new = Hp;
 
     new = update(&ph->Hn, new, &ph->Hp);
     new = update(&ph->Tn, new, &ph->Hp);
 
+    phs[i++] = ph;
     ph = ph->next;
   } while (new->id > oid && ph != th);
+
+  while (new->id > oid && --i >= 0) {
+    node_t * Hp = ACQUIRE(&phs[i]->Hp);
+    if (Hp && Hp->id < new->id) new = Hp;
+  }
 
   long nid = new->id;
 
   if (nid <= oid) {
-    q->Ri = oid;
+    RELEASE(&q->Ri, oid);
   } else {
     q->Rn = new;
     RELEASE(&q->Ri, nid);
@@ -186,7 +194,7 @@ static int enq_fast(queue_t * q, handle_t * th, void * v, long * id)
 static void enq_slow(queue_t * q, handle_t * th, void * v, long id)
 {
   enq_t * enq = &th->req.enq;
-  RELEASE(&enq->val, v);
+  enq->val = v;
   RELEASE(&enq->id, id);
 
   node_t * tail = th->Tn;
@@ -265,16 +273,18 @@ static void * help_enq(queue_t * q, handle_t * th, cell_t * c, long i)
   return c->val;
 }
 
-static void help_deq(queue_t * q, handle_t * th, deq_t * deq, node_t * Hn)
+static void help_deq(queue_t * q, handle_t * th, handle_t * peer)
 {
+  deq_t * deq = &peer->req.deq;
   long id = ACQUIRE(&deq->id);
   if (id <= 0) return;
 
-  th->Hp = Hn;
-  FENCE();
-
   long idx = deq->idx;
   long i = id + 1, old = -id, new = 0;
+
+  node_t * Hn = peer->Hn;
+  th->Hp = Hn;
+  FENCE();
 
   while (deq->id == id) {
     node_t * h = Hn;
@@ -318,10 +328,8 @@ static void * deq_fast(queue_t * q, handle_t * th, long * id)
   if (v != TOP) {
     deq_t * cd = c->deq;
     if (cd == BOT && CAS(&c->deq, &cd, TOP)) {
-      handle_t * peer = th->peer.deq;
-      help_deq(q, th, &peer->req.deq, ACQUIRE(&peer->Hn));
-      th->peer.deq = peer->next;
-
+      help_deq(q, th, th->peer.deq);
+      th->peer.deq = th->peer.deq->next;
       return v;
     }
   }
@@ -337,7 +345,7 @@ static void * deq_slow(queue_t * q, handle_t * th, long id)
   RELEASE(&deq->id, id);
 
   node_t * Hn = th->Hn;
-  help_deq(q, th, deq, Hn);
+  help_deq(q, th, th);
   long i = deq->idx;
 
   long Hi = q->Hi;
