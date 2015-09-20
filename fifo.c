@@ -60,7 +60,6 @@ typedef struct DOUBLE_CACHE_ALIGNED _handle_t {
     struct _handle_t * deq;
   } peer;
   node_t * retired;
-  int winner;
 } handle_t;
 
 static inline void * spin(void * volatile * p) {
@@ -104,9 +103,11 @@ static void cleanup(queue_t * q, handle_t * th) {
   long oid = q->Ri;
   node_t * new = th->Hn;
 
-  if (oid == -1) return;
-  if (new->id - oid < MAX_GARBAGE) return;
-  if (!CASar(&q->Ri, &oid, -1)) return;
+  if (oid == -1 || new->id - oid < MAX_GARBAGE ||
+      !CASar(&q->Ri, &oid, -1)) {
+    th->retired = new_node(0);
+    return;
+  }
 
   node_t * old = q->Rn;
   handle_t * ph = th;
@@ -137,6 +138,10 @@ static void cleanup(queue_t * q, handle_t * th) {
     q->Rn = new;
     RELEASE(&q->Ri, nid);
 
+    th->retired = old;
+    old = old->next;
+    th->retired->next = NULL;
+
     while (old != new) {
       node_t * tmp = old->next;
       free(old);
@@ -156,7 +161,6 @@ static cell_t * find_cell(node_t * volatile * p, long i, handle_t * th) {
       node_t * t = th->retired;
 
       if (t) {
-        t->next = NULL;
         t->id = j + 1;
       } else {
         t = new_node(j + 1);
@@ -165,7 +169,6 @@ static cell_t * find_cell(node_t * volatile * p, long i, handle_t * th) {
 
       if (CASra(&c->next, &n, t)) {
         n = t;
-        th->winner = 1;
         th->retired = NULL;
       }
     }
@@ -277,7 +280,7 @@ static void help_deq(queue_t * q, handle_t * th, handle_t * peer)
 {
   deq_t * deq = &peer->req.deq;
   long id = ACQUIRE(&deq->id);
-  if (id <= 0) return;
+  if (id == 0) return;
 
   long idx = deq->idx;
   long i = id + 1, old = -id, new = 0;
@@ -309,7 +312,7 @@ static void help_deq(queue_t * q, handle_t * th, handle_t * peer)
 
     if (c->val == TOP ||
         cd == BOT && CAS(&c->deq, &cd, deq) || cd == deq) {
-      CAS(&deq->id, &id, -idx);
+      CAS(&deq->id, &id, 0);
       break;
     }
 
@@ -370,9 +373,8 @@ void * wfdeq(queue_t * q, handle_t * th)
 
   RELEASE(&th->Hp, NULL);
 
-  if (th->winner) {
+  if (th->retired == NULL) {
     cleanup(q, th);
-    th->winner = 0;
   }
 
   return v;
@@ -393,7 +395,6 @@ void wfregister(queue_t * q, handle_t * th)
   th->Hn = q->Rn;
   th->Hp = NULL;
   th->next = NULL;
-  th->winner = 0;
   th->retired = new_node(0);
 
   th->req.enq.id = 0;
