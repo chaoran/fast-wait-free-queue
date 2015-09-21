@@ -9,7 +9,7 @@
 #define BOT ((void *) 0)
 #define TOP ((void *)-1)
 
-#define MAX_GARBAGE 100
+#define MAX_GARBAGE(n) (n < 100 ? 100 : n)
 #define MAX_SPIN 1000
 
 #ifndef MAX_PATIENCE
@@ -102,12 +102,12 @@ static void cleanup(queue_t * q, handle_t * th) {
   node_t * new = th->Hn;
 
   if (oid == -1) return;
-  if (new->id - oid < MAX_GARBAGE) return;
+  if (new->id - oid < MAX_GARBAGE(q->nprocs)) return;
   if (!CASar(&q->Ri, &oid, -1)) return;
 
   node_t * old = q->Rn;
   handle_t * ph = th;
-  handle_t * phs[256];
+  handle_t * phs[q->nprocs];
   int i = 0;
 
   do {
@@ -373,13 +373,15 @@ void * wfdeq(queue_t * q, handle_t * th)
   return v;
 }
 
-void wfinit(queue_t * q, long width)
+void wfinit(queue_t * q, long nprocs)
 {
   q->Ri = 0;
   q->Rn = new_node();
 
   q->Ti = 1;
   q->Hi = 1;
+
+  q->nprocs = nprocs;
 }
 
 void wfregister(queue_t * q, handle_t * th)
