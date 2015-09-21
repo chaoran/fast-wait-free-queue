@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 #include "align.h"
@@ -74,12 +75,9 @@ static inline void * spin(void * volatile * p) {
   return v;
 }
 
-static inline node_t * new_node(long id) {
+static inline node_t * new_node() {
   node_t * n = malloc(sizeof(node_t));
   memset(n, 0, sizeof(node_t));
-  n->id = id;
-  n->next = NULL;
-
   return n;
 }
 
@@ -103,11 +101,9 @@ static void cleanup(queue_t * q, handle_t * th) {
   long oid = q->Ri;
   node_t * new = th->Hn;
 
-  if (oid == -1 || new->id - oid < MAX_GARBAGE ||
-      !CASar(&q->Ri, &oid, -1)) {
-    th->retired = new_node(0);
-    return;
-  }
+  if (oid == -1) return;
+  if (new->id - oid < MAX_GARBAGE) return;
+  if (!CASar(&q->Ri, &oid, -1)) return;
 
   node_t * old = q->Rn;
   handle_t * ph = th;
@@ -138,10 +134,6 @@ static void cleanup(queue_t * q, handle_t * th) {
     q->Rn = new;
     RELEASE(&q->Ri, nid);
 
-    th->retired = old;
-    old = old->next;
-    th->retired->next = NULL;
-
     while (old != new) {
       node_t * tmp = old->next;
       free(old);
@@ -160,12 +152,12 @@ static cell_t * find_cell(node_t * volatile * p, long i, handle_t * th) {
     if (n == NULL) {
       node_t * t = th->retired;
 
-      if (t) {
-        t->id = j + 1;
-      } else {
-        t = new_node(j + 1);
+      if (t == NULL) {
+        t = new_node();
         th->retired = t;
       }
+
+      t->id = j + 1;
 
       if (CASra(&c->next, &n, t)) {
         n = t;
@@ -375,6 +367,7 @@ void * wfdeq(queue_t * q, handle_t * th)
 
   if (th->retired == NULL) {
     cleanup(q, th);
+    th->retired = new_node();
   }
 
   return v;
@@ -383,7 +376,7 @@ void * wfdeq(queue_t * q, handle_t * th)
 void wfinit(queue_t * q, long width)
 {
   q->Ri = 0;
-  q->Rn = new_node(0);
+  q->Rn = new_node();
 
   q->Ti = 1;
   q->Hi = 1;
@@ -395,7 +388,7 @@ void wfregister(queue_t * q, handle_t * th)
   th->Hn = q->Rn;
   th->Hp = NULL;
   th->next = NULL;
-  th->retired = new_node(0);
+  th->retired = new_node();
 
   th->req.enq.id = 0;
   th->req.enq.val = BOT;
