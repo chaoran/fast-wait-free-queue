@@ -277,7 +277,7 @@ static void help_deq(queue_t * q, handle_t * th, handle_t * peer)
 {
   deq_t * deq = &peer->req.deq;
   long id = ACQUIRE(&deq->id);
-  if (id <= 0) return;
+  if (id == 0) return;
 
   long idx = deq->idx;
   long i = id + 1, old = -id, new = 0;
@@ -309,7 +309,7 @@ static void help_deq(queue_t * q, handle_t * th, handle_t * peer)
 
     if (c->val == TOP ||
         cd == BOT && CAS(&c->deq, &cd, deq) || cd == deq) {
-      CAS(&deq->id, &id, -idx);
+      CAS(&deq->id, &id, 0);
       break;
     }
 
