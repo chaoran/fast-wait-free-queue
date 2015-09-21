@@ -7,7 +7,7 @@
 #define BOT ((void *) 0)
 #define TOP ((void *)-1)
 
-#define MAX_GARBAGE(n) (2 * n < 100 ? 100 : 2 * n)
+#define MAX_GARBAGE(n) (2 * n)
 #define MAX_SPIN 1000
 
 #ifndef MAX_PATIENCE
