@@ -1,15 +1,13 @@
-#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 #include "align.h"
-#include "delay.h"
 #include "primitives.h"
 
 #define N ((1 << 10) - 2)
 #define BOT ((void *) 0)
 #define TOP ((void *)-1)
 
-#define MAX_GARBAGE(n) (n < 100 ? 100 : n)
+#define MAX_GARBAGE(n) (2 * n < 100 ? 100 : 2 * n)
 #define MAX_SPIN 1000
 
 #ifndef MAX_PATIENCE
@@ -45,7 +43,7 @@ typedef struct DOUBLE_CACHE_ALIGNED {
   volatile long Hi DOUBLE_CACHE_ALIGNED;
   node_t * volatile Hp;
   long nprocs;
-} queue_t;
+} wfqueue_t;
 
 typedef struct DOUBLE_CACHE_ALIGNED _handle_t {
   struct _handle_t * next;
@@ -93,7 +91,7 @@ static node_t * update(node_t * volatile * pPn, node_t * cur,
   return cur;
 }
 
-static void cleanup(queue_t * q, handle_t * th) {
+static void cleanup(wfqueue_t * q, handle_t * th) {
   long oid = q->Hi;
   node_t * new = th->Dp;
 
@@ -168,7 +166,7 @@ static cell_t * find_cell(node_t * volatile * p, long i, handle_t * th) {
   return &c->cells[i % N];
 }
 
-static int enq_fast(queue_t * q, handle_t * th, void * v, long * id)
+static int enq_fast(wfqueue_t * q, handle_t * th, void * v, long * id)
 {
   long i = FAAcs(&q->Ei, 1);
   cell_t * c = find_cell(&th->Ep, i, th);
@@ -182,7 +180,7 @@ static int enq_fast(queue_t * q, handle_t * th, void * v, long * id)
   }
 }
 
-static void enq_slow(queue_t * q, handle_t * th, void * v, long id)
+static void enq_slow(wfqueue_t * q, handle_t * th, void * v, long id)
 {
   enq_t * enq = &th->Er;
   enq->val = v;
@@ -206,7 +204,7 @@ static void enq_slow(queue_t * q, handle_t * th, void * v, long id)
   } while (enq->id > 0);
 }
 
-void wfenq(queue_t * q, handle_t * th, void * v)
+void wfenq(wfqueue_t * q, handle_t * th, void * v)
 {
   th->Hp = th->Ep;
 
@@ -218,7 +216,7 @@ void wfenq(queue_t * q, handle_t * th, void * v)
   RELEASE(&th->Hp, NULL);
 }
 
-static void * help_enq(queue_t * q, handle_t * th, cell_t * c, long i)
+static void * help_enq(wfqueue_t * q, handle_t * th, cell_t * c, long i)
 {
   void * v = spin(&c->val);
 
@@ -264,7 +262,7 @@ static void * help_enq(queue_t * q, handle_t * th, cell_t * c, long i)
   return c->val;
 }
 
-static void help_deq(queue_t * q, handle_t * th, handle_t * ph)
+static void help_deq(wfqueue_t * q, handle_t * th, handle_t * ph)
 {
   deq_t * deq = &ph->Dr;
   long id = ACQUIRE(&deq->id);
@@ -309,7 +307,7 @@ static void help_deq(queue_t * q, handle_t * th, handle_t * ph)
   }
 }
 
-static void * deq_fast(queue_t * q, handle_t * th, long * id)
+static void * deq_fast(wfqueue_t * q, handle_t * th, long * id)
 {
   long i = FAAcs(&q->Di, 1);
   cell_t * c = find_cell(&th->Dp, i, th);
@@ -329,7 +327,7 @@ static void * deq_fast(queue_t * q, handle_t * th, long * id)
   return TOP;
 }
 
-static void * deq_slow(queue_t * q, handle_t * th, long id)
+static void * deq_slow(wfqueue_t * q, handle_t * th, long id)
 {
   deq_t * deq = &th->Dr;
   deq->idx = -id;
@@ -347,7 +345,7 @@ static void * deq_slow(queue_t * q, handle_t * th, long id)
   return val == TOP ? BOT : val;
 }
 
-void * wfdeq(queue_t * q, handle_t * th)
+void * wfdeq(wfqueue_t * q, handle_t * th)
 {
   th->Hp = th->Dp;
 
@@ -369,7 +367,7 @@ void * wfdeq(queue_t * q, handle_t * th)
   return v;
 }
 
-void wfinit(queue_t * q, long nprocs)
+void wfinit(wfqueue_t * q, long nprocs)
 {
   q->Hi = 0;
   q->Hp = new_node();
@@ -380,7 +378,7 @@ void wfinit(queue_t * q, long nprocs)
   q->nprocs = nprocs;
 }
 
-void wfregister(queue_t * q, handle_t * th)
+void wfregister(wfqueue_t * q, handle_t * th)
 {
   th->Ep = q->Hp;
   th->Dp = q->Hp;
@@ -415,7 +413,7 @@ void wfregister(queue_t * q, handle_t * th)
 
 void * init(int nprocs)
 {
-  queue_t * q = align_malloc(sizeof(queue_t), PAGE_SIZE);
+  wfqueue_t * q = align_malloc(sizeof(wfqueue_t), PAGE_SIZE);
   wfinit(q, nprocs);
   return q;
 }
@@ -423,18 +421,18 @@ void * init(int nprocs)
 void * thread_init(int nprocs, int id, void * q)
 {
   handle_t * th = align_malloc(sizeof(handle_t), PAGE_SIZE);
-  wfregister((queue_t *) q, th);
+  wfregister((wfqueue_t *) q, th);
   return th;
 }
 
 void enqueue(void * q, void * th, void * val)
 {
-  wfenq((queue_t *) q, (handle_t *) th, val);
+  wfenq((wfqueue_t *) q, (handle_t *) th, val);
 }
 
 void * dequeue(void * q, void * th)
 {
-  return wfdeq((queue_t *) q, (handle_t *) th);
+  return wfdeq((wfqueue_t *) q, (handle_t *) th);
 }
 
 void * EMPTY = BOT;

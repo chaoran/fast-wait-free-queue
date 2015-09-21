@@ -1,4 +1,4 @@
-TESTS = fifo fifo0 lcrq ccqueue msqueue faa
+TESTS = wfqueue wfqueue0 lcrq ccqueue msqueue faa
 
 CC = gcc
 CFLAGS = -g -O3 -DBENCHMARK -pthread
@@ -6,8 +6,8 @@ LDLIBS = -lpthread -lm
 
 all: $(TESTS)
 
-fifo0: CFLAGS += -DMAX_PATIENCE=0
-fifo0.o: fifo.c
+wfqueue0: CFLAGS += -DMAX_PATIENCE=0
+wfqueue0.o: wfqueue.c
 	$(CC) $(CFLAGS) -c -o $@ $^
 
 haswell: CFLAGS += -DGUADALUPE_COMPACT
