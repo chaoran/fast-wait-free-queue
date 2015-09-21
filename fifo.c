@@ -40,27 +40,23 @@ typedef struct _node_t {
 } node_t;
 
 typedef struct DOUBLE_CACHE_ALIGNED {
-  volatile long Ti DOUBLE_CACHE_ALIGNED;
+  volatile long Ei DOUBLE_CACHE_ALIGNED;
+  volatile long Di DOUBLE_CACHE_ALIGNED;
   volatile long Hi DOUBLE_CACHE_ALIGNED;
-  volatile long Ri DOUBLE_CACHE_ALIGNED;
-  node_t * volatile Rn;
+  node_t * volatile Hp;
   long nprocs;
 } queue_t;
 
 typedef struct DOUBLE_CACHE_ALIGNED _handle_t {
-  node_t * volatile Tn;
-  node_t * volatile Hn;
-  node_t * volatile Hp;
   struct _handle_t * next;
-  struct CACHE_ALIGNED {
-    enq_t enq;
-    deq_t deq;
-  } req;
-  struct CACHE_ALIGNED {
-    struct _handle_t * enq;
-    struct _handle_t * deq;
-  } peer;
-  node_t * retired;
+  node_t * volatile Hp;
+  node_t * volatile Ep;
+  node_t * volatile Dp;
+  enq_t Er CACHE_ALIGNED;
+  deq_t Dr;
+  struct _handle_t * Eh CACHE_ALIGNED;
+  struct _handle_t * Dh;
+  node_t * retired CACHE_ALIGNED;
 } handle_t;
 
 static inline void * spin(void * volatile * p) {
@@ -98,14 +94,14 @@ static node_t * update(node_t * volatile * pPn, node_t * cur,
 }
 
 static void cleanup(queue_t * q, handle_t * th) {
-  long oid = q->Ri;
-  node_t * new = th->Hn;
+  long oid = q->Hi;
+  node_t * new = th->Dp;
 
   if (oid == -1) return;
   if (new->id - oid < MAX_GARBAGE(q->nprocs)) return;
-  if (!CASar(&q->Ri, &oid, -1)) return;
+  if (!CASar(&q->Hi, &oid, -1)) return;
 
-  node_t * old = q->Rn;
+  node_t * old = q->Hp;
   handle_t * ph = th;
   handle_t * phs[q->nprocs];
   int i = 0;
@@ -114,8 +110,8 @@ static void cleanup(queue_t * q, handle_t * th) {
     node_t * Hp = ACQUIRE(&ph->Hp);
     if (Hp && Hp->id < new->id) new = Hp;
 
-    new = update(&ph->Hn, new, &ph->Hp);
-    new = update(&ph->Tn, new, &ph->Hp);
+    new = update(&ph->Ep, new, &ph->Hp);
+    new = update(&ph->Dp, new, &ph->Hp);
 
     phs[i++] = ph;
     ph = ph->next;
@@ -129,10 +125,10 @@ static void cleanup(queue_t * q, handle_t * th) {
   long nid = new->id;
 
   if (nid <= oid) {
-    RELEASE(&q->Ri, oid);
+    RELEASE(&q->Hi, oid);
   } else {
-    q->Rn = new;
-    RELEASE(&q->Ri, nid);
+    q->Hp = new;
+    RELEASE(&q->Hi, nid);
 
     while (old != new) {
       node_t * tmp = old->next;
@@ -174,8 +170,8 @@ static cell_t * find_cell(node_t * volatile * p, long i, handle_t * th) {
 
 static int enq_fast(queue_t * q, handle_t * th, void * v, long * id)
 {
-  long i = FAAcs(&q->Ti, 1);
-  cell_t * c = find_cell(&th->Tn, i, th);
+  long i = FAAcs(&q->Ei, 1);
+  cell_t * c = find_cell(&th->Ep, i, th);
   void * cv = c->val;
 
   if (cv == BOT && CAS(&c->val, &cv, v)) {
@@ -188,20 +184,20 @@ static int enq_fast(queue_t * q, handle_t * th, void * v, long * id)
 
 static void enq_slow(queue_t * q, handle_t * th, void * v, long id)
 {
-  enq_t * enq = &th->req.enq;
+  enq_t * enq = &th->Er;
   enq->val = v;
   RELEASE(&enq->id, id);
 
-  node_t * tail = th->Tn;
+  node_t * tail = th->Ep;
 
   do {
-    long i = FAA(&q->Ti, 1);
+    long i = FAA(&q->Ei, 1);
     cell_t * c = find_cell(&tail, i, th);
     enq_t * ce = c->enq;
 
     if (ce == BOT && CAScs(&c->enq, &ce, enq) && c->val != TOP) {
       if (!CAS(&enq->id, &id, -i)) {
-        c = find_cell(&th->Tn, -id, th);
+        c = find_cell(&th->Ep, -id, th);
       }
 
       c->val = v;
@@ -212,7 +208,7 @@ static void enq_slow(queue_t * q, handle_t * th, void * v, long id)
 
 void wfenq(queue_t * q, handle_t * th, void * v)
 {
-  th->Hp = th->Tn;
+  th->Hp = th->Ep;
 
   long id;
   int p = MAX_PATIENCE;
@@ -234,27 +230,27 @@ static void * help_enq(queue_t * q, handle_t * th, cell_t * c, long i)
   enq_t * e = c->enq;
 
   if (e == BOT) {
-    handle_t * ph = th->peer.enq;
+    handle_t * ph = th->Eh;
 
     do {
-      enq_t * pe = &ph->req.enq;
+      enq_t * pe = &ph->Er;
       long id = pe->id;
 
       if (id > 0 && id <= i) {
-        long Ti = q->Ti;
-        while (Ti <= i && !CAS(&q->Ti, &Ti, i + 1));
+        long Ei = q->Ei;
+        while (Ei <= i && !CAS(&q->Ei, &Ei, i + 1));
 
         if (CAS(&c->enq, &e, pe)) e = pe;
-        th->peer.enq = (e == pe ? ph->next : ph);
+        th->Eh = (e == pe ? ph->next : ph);
         break;
       }
 
       ph = ph->next;
-    } while (ph != th->peer.enq);
+    } while (ph != th->Eh);
   }
 
   if (e == BOT && CAS(&c->enq, &e, TOP) || e == TOP) {
-    return (q->Ti <= i ? BOT : TOP);
+    return (q->Ei <= i ? BOT : TOP);
   }
 
   long ei = ACQUIRE(&e->id);
@@ -268,21 +264,21 @@ static void * help_enq(queue_t * q, handle_t * th, cell_t * c, long i)
   return c->val;
 }
 
-static void help_deq(queue_t * q, handle_t * th, handle_t * peer)
+static void help_deq(queue_t * q, handle_t * th, handle_t * ph)
 {
-  deq_t * deq = &peer->req.deq;
+  deq_t * deq = &ph->Dr;
   long id = ACQUIRE(&deq->id);
   if (id == 0) return;
 
   long idx = deq->idx;
   long i = id + 1, old = -id, new = 0;
 
-  node_t * Hn = peer->Hn;
-  th->Hp = Hn;
+  node_t * Dp = ph->Dp;
+  th->Hp = Dp;
   FENCE();
 
   while (deq->id == id) {
-    node_t * h = Hn;
+    node_t * h = Dp;
     for (; new == 0 && idx == old; ++i) {
       cell_t * c = find_cell(&h, i, th);
       void * v = help_enq(q, th, c, i);
@@ -299,7 +295,7 @@ static void help_deq(queue_t * q, handle_t * th, handle_t * peer)
 
     if (idx < 0) break;
 
-    cell_t * c = find_cell(&Hn, idx, th);
+    cell_t * c = find_cell(&Dp, idx, th);
     deq_t * cd = c->deq;
 
     if (c->val == TOP ||
@@ -315,16 +311,16 @@ static void help_deq(queue_t * q, handle_t * th, handle_t * peer)
 
 static void * deq_fast(queue_t * q, handle_t * th, long * id)
 {
-  long i = FAAcs(&q->Hi, 1);
-  cell_t * c = find_cell(&th->Hn, i, th);
+  long i = FAAcs(&q->Di, 1);
+  cell_t * c = find_cell(&th->Dp, i, th);
   void * v = help_enq(q, th, c, i);
 
   if (v == BOT) return BOT;
   if (v != TOP) {
     deq_t * cd = c->deq;
     if (cd == BOT && CAS(&c->deq, &cd, TOP)) {
-      help_deq(q, th, th->peer.deq);
-      th->peer.deq = th->peer.deq->next;
+      help_deq(q, th, th->Dh);
+      th->Dh = th->Dh->next;
       return v;
     }
   }
@@ -335,25 +331,25 @@ static void * deq_fast(queue_t * q, handle_t * th, long * id)
 
 static void * deq_slow(queue_t * q, handle_t * th, long id)
 {
-  deq_t * deq = &th->req.deq;
+  deq_t * deq = &th->Dr;
   deq->idx = -id;
   RELEASE(&deq->id, id);
 
-  node_t * Hn = th->Hn;
+  node_t * Dp = th->Dp;
   help_deq(q, th, th);
   long i = deq->idx;
 
-  long Hi = q->Hi;
-  while (Hi <= i && !CAS(&q->Hi, &Hi, i + 1));
+  long Di = q->Di;
+  while (Di <= i && !CAS(&q->Di, &Di, i + 1));
 
-  cell_t * c = find_cell(&th->Hn, i, th);
+  cell_t * c = find_cell(&th->Dp, i, th);
   void * val = c->val;
   return val == TOP ? BOT : val;
 }
 
 void * wfdeq(queue_t * q, handle_t * th)
 {
-  th->Hp = th->Hn;
+  th->Hp = th->Dp;
 
   void * v;
   long id;
@@ -375,27 +371,27 @@ void * wfdeq(queue_t * q, handle_t * th)
 
 void wfinit(queue_t * q, long nprocs)
 {
-  q->Ri = 0;
-  q->Rn = new_node();
+  q->Hi = 0;
+  q->Hp = new_node();
 
-  q->Ti = 1;
-  q->Hi = 1;
+  q->Ei = 1;
+  q->Di = 1;
 
   q->nprocs = nprocs;
 }
 
 void wfregister(queue_t * q, handle_t * th)
 {
-  th->Tn = q->Rn;
-  th->Hn = q->Rn;
+  th->Ep = q->Hp;
+  th->Dp = q->Hp;
   th->Hp = NULL;
   th->next = NULL;
   th->retired = new_node();
 
-  th->req.enq.id = 0;
-  th->req.enq.val = BOT;
-  th->req.deq.id = 0;
-  th->req.deq.idx = 0;
+  th->Er.id = 0;
+  th->Er.val = BOT;
+  th->Dr.id = 0;
+  th->Dr.idx = 0;
 
   static handle_t * volatile _tail;
   handle_t * tail = _tail;
@@ -403,8 +399,8 @@ void wfregister(queue_t * q, handle_t * th)
   if (tail == NULL) {
     th->next = th;
     if (CASra(&_tail, &tail, th)) {
-      th->peer.enq = th->next;
-      th->peer.deq = th->next;
+      th->Eh = th->next;
+      th->Dh = th->next;
       return;
     }
   }
@@ -413,8 +409,8 @@ void wfregister(queue_t * q, handle_t * th)
   do th->next = next;
   while (!CASra(&tail->next, &next, th));
 
-  th->peer.enq = th->next;
-  th->peer.deq = th->next;
+  th->Eh = th->next;
+  th->Dh = th->next;
 }
 
 void * init(int nprocs)
