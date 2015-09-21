@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 #include "align.h"
@@ -60,7 +61,6 @@ typedef struct DOUBLE_CACHE_ALIGNED _handle_t {
     struct _handle_t * deq;
   } peer;
   node_t * retired;
-  int winner;
 } handle_t;
 
 static inline void * spin(void * volatile * p) {
@@ -75,12 +75,9 @@ static inline void * spin(void * volatile * p) {
   return v;
 }
 
-static inline node_t * new_node(long id) {
+static inline node_t * new_node() {
   node_t * n = malloc(sizeof(node_t));
   memset(n, 0, sizeof(node_t));
-  n->id = id;
-  n->next = NULL;
-
   return n;
 }
 
@@ -155,17 +152,15 @@ static cell_t * find_cell(node_t * volatile * p, long i, handle_t * th) {
     if (n == NULL) {
       node_t * t = th->retired;
 
-      if (t) {
-        t->next = NULL;
-        t->id = j + 1;
-      } else {
-        t = new_node(j + 1);
+      if (t == NULL) {
+        t = new_node();
         th->retired = t;
       }
 
+      t->id = j + 1;
+
       if (CASra(&c->next, &n, t)) {
         n = t;
-        th->winner = 1;
         th->retired = NULL;
       }
     }
@@ -370,9 +365,9 @@ void * wfdeq(queue_t * q, handle_t * th)
 
   RELEASE(&th->Hp, NULL);
 
-  if (th->winner) {
+  if (th->retired == NULL) {
     cleanup(q, th);
-    th->winner = 0;
+    th->retired = new_node();
   }
 
   return v;
@@ -381,7 +376,7 @@ void * wfdeq(queue_t * q, handle_t * th)
 void wfinit(queue_t * q, long width)
 {
   q->Ri = 0;
-  q->Rn = new_node(0);
+  q->Rn = new_node();
 
   q->Ti = 1;
   q->Hi = 1;
@@ -393,8 +388,7 @@ void wfregister(queue_t * q, handle_t * th)
   th->Hn = q->Rn;
   th->Hp = NULL;
   th->next = NULL;
-  th->winner = 0;
-  th->retired = new_node(0);
+  th->retired = new_node();
 
   th->req.enq.id = 0;
   th->req.enq.val = BOT;
