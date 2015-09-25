@@ -51,7 +51,7 @@ typedef struct DOUBLE_CACHE_ALIGNED _handle_t {
   node_t * volatile Ep;
   node_t * volatile Dp;
   enq_t Er CACHE_ALIGNED;
-  deq_t Dr;
+  deq_t Dr CACHE_ALIGNED;
   struct _handle_t * Eh CACHE_ALIGNED;
   struct _handle_t * Dh;
   node_t * retired CACHE_ALIGNED;
