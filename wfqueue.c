@@ -14,6 +14,10 @@
 #define MAX_PATIENCE 100
 #endif
 
+#ifndef MAX_DELAY
+#define MAX_DELAY 100
+#endif
+
 typedef struct CACHE_ALIGNED {
   long volatile id;
   void * volatile val;
@@ -55,6 +59,7 @@ typedef struct DOUBLE_CACHE_ALIGNED _handle_t {
   struct _handle_t * Eh CACHE_ALIGNED;
   struct _handle_t * Dh;
   node_t * retired CACHE_ALIGNED;
+  int delay;
 } handle_t;
 
 static inline void * spin(void * volatile * p) {
@@ -317,8 +322,11 @@ static void * deq_fast(wfqueue_t * q, handle_t * th, long * id)
   if (v != TOP) {
     deq_t * cd = c->deq;
     if (cd == BOT && CAS(&c->deq, &cd, TOP)) {
-      help_deq(q, th, th->Dh);
-      th->Dh = th->Dh->next;
+      if (++th->delay > MAX_DELAY) {
+        help_deq(q, th, th->Dh);
+        th->Dh = th->Dh->next;
+        th->delay = 0;
+      }
       return v;
     }
   }
@@ -385,6 +393,7 @@ void wfregister(wfqueue_t * q, handle_t * th)
   th->Hp = NULL;
   th->next = NULL;
   th->retired = new_node();
+  th->delay = 0;
 
   th->Er.id = 0;
   th->Er.val = BOT;
