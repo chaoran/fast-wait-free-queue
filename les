@@ -1,0 +1,10 @@
+#!/bin/bash
+
+NPROCS=(24 48)
+TESTS=(wfqueue wfqueue0 faa lcrq ccqueue msqueue)
+
+for i in ${NPROCS[@]}; do
+  for j in ${TESTS[@]}; do
+    echo $j $i $(./driver 95 ./$j $i | tail -n 1 | awk '{print $3,$5,$6}')
+  done
+done
