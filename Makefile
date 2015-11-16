@@ -1,4 +1,4 @@
-TESTS = wfqueue lcrq#ccqueue msqueue faa
+TESTS = wfqueue lcrq ccqueue#msqueue faa
 
 CC = gcc
 CFLAGS = -g -O3 -pthread -D_GNU_SOURCE
@@ -21,6 +21,7 @@ biou: CFLAGS += -DBIOU_COMPACT
 
 wfqueue: CFLAGS += -DWFQUEUE
 lcrq: CFLAGS += -DLCRQ
+ccqueue: CFLAGS += -DCCQUEUE
 
 $(TESTS): harness.o pairwise.o
 

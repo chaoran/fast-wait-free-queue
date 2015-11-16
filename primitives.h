@@ -37,6 +37,16 @@
     __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)
 
 /**
+ * An atomic swap.
+ */
+#define SWAP(ptr, val) __atomic_exchange_n(ptr, val, __ATOMIC_RELAXED)
+
+/**
+ * An atomic swap that ensures acquire release semantics.
+ */
+#define SWAPra(ptr, val) __atomic_exchange_n(ptr, val, __ATOMIC_ACQ_REL)
+
+/**
  * A memory fence to ensure sequential consistency.
  */
 #define FENCE() __atomic_thread_fence(__ATOMIC_SEQ_CST)

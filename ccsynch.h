@@ -3,7 +3,7 @@
 
 #include <stdlib.h>
 #include "align.h"
-#include "atomic.h"
+#include "primitives.h"
 
 typedef struct _ccsynch_node_t {
   struct _ccsynch_node_t * volatile next CACHE_ALIGNED;
@@ -31,50 +31,45 @@ void ccsynch_apply(ccsynch_t * synch, ccsynch_handle_t * handle,
   next->next = NULL;
   next->status = CCSYNCH_WAIT;
 
-  release_fence();
-
-  ccsynch_node_t * curr = swap(&synch->tail, next);
+  ccsynch_node_t * curr = SWAPra(&synch->tail, next);
   handle->next = curr;
 
   int status = curr->status;
-  acquire_fence();
 
   if (status == CCSYNCH_WAIT) {
     curr->data = data;
-    release_fence();
-    curr->next = next;
-    spin_while((status = curr->status) == CCSYNCH_WAIT);
-    acquire_fence();
+    RELEASE(&curr->next, next);
+
+    do {
+      status = ACQUIRE(&curr->status);
+      PAUSE();
+    } while (status == CCSYNCH_WAIT);
   }
 
   if (status != CCSYNCH_DONE) {
     apply(state, data);
 
     curr = next;
-    next = curr->next;
-    acquire_fence();
+    next = ACQUIRE(&curr->next);
 
     int count = 0;
     const int CCSYNCH_HELP_BOUND = 256;
 
     while (next && count++ < CCSYNCH_HELP_BOUND) {
       apply(state, curr->data);
-      release_fence();
-      curr->status = CCSYNCH_DONE;
+      RELEASE(&curr->status, CCSYNCH_DONE);
 
       curr = next;
-      next = curr->next;
-      acquire_fence();
+      next = ACQUIRE(&curr->next);
     }
 
-    release_fence();
-    curr->status = CCSYNCH_READY;
+    RELEASE(&curr->status, CCSYNCH_READY);
   }
 }
 
 void ccsynch_init(ccsynch_t * synch)
 {
-  ccsynch_node_t * node = align_malloc(sizeof(ccsynch_node_t), CACHE_LINE_SIZE);
+  ccsynch_node_t * node = aligned_alloc(CACHE_LINE_SIZE, sizeof(ccsynch_node_t));
   node->next = NULL;
   node->status = CCSYNCH_READY;
 
@@ -83,7 +78,7 @@ void ccsynch_init(ccsynch_t * synch)
 
 void ccsynch_handle_init(ccsynch_handle_t * handle)
 {
-  handle->next = align_malloc(sizeof(ccsynch_node_t), CACHE_LINE_SIZE);
+  handle->next = aligned_alloc(CACHE_LINE_SIZE, sizeof(ccsynch_node_t));
 }
 
 #endif
