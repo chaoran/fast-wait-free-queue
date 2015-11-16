@@ -4,6 +4,10 @@
 #include "delay.h"
 #include "queue.h"
 
+#ifndef LOGN_OPS
+#define LOGN_OPS 7
+#endif
+
 static long nops;
 static queue_t * q;
 static handle_t ** hds;
@@ -11,7 +15,7 @@ static handle_t ** hds;
 void init(int nprocs, int logn) {
 
   /** Use 10^7 as default input size. */
-  if (logn == 0) logn = 7;
+  if (logn == 0) logn = LOGN_OPS;
 
   /** Compute the number of ops to perform. */
   nops = 1;

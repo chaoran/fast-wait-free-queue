@@ -92,12 +92,15 @@ _compare_and_swap(void ** ptr, void ** expected, void * desired) {
 #define CASra CAS
 #define CASa  CAS
 
-static inline void * _acquire(void * volatile * p) {
-  void * v = *p;
-  __asm__("":::"memory");
-  return v;
-}
-#define ACQUIRE(p) (__typeof__(*p))_acquire((void * volatile *)p)
+#define SWAP __sync_lock_test_and_set
+#define SWAPra SWAP
+
+#define ACQUIRE(p) ({ \
+  __typeof__(*(p)) __ret = *p; \
+  __asm__("":::"memory"); \
+  __ret; \
+})
+
 #define RELEASE(p, v) do {\
   __asm__("":::"memory"); \
   *p = v; \
