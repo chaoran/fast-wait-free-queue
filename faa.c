@@ -1,30 +1,20 @@
-#ifdef BENCHMARK
-#include "align.h"
-#include "delay.h"
-#include "atomic.h"
+#include "queue.h"
+#include "primitives.h"
 
-void * init(int nprocs) { return NULL; }
-
-void * thread_init(int nprocs, int id, void * q) {
-  void ** tid = malloc(sizeof(void *));
-  *tid = (void *) (size_t) (id + 1);
-  return tid;
-}
-
-static volatile long P DOUBLE_CACHE_ALIGNED = 0;
-static volatile long C DOUBLE_CACHE_ALIGNED = 0;
-
-void enqueue(void * q, void * th, void * val)
+void queue_init(queue_t * q, int nprocs) {}
+void queue_register(queue_t * q, handle_t * hd, int id)
 {
-  fetch_and_add(&P, 1);
+  *hd = id;
 }
 
-void * dequeue(void * q, void * th)
+void enqueue(queue_t * q, handle_t * th, void * val)
 {
-  fetch_and_add(&C, 1);
-  return *(void **) th;
+  FAA(&q->P, 1);
 }
 
-void * EMPTY = NULL;
+void * dequeue(queue_t * q, handle_t * th)
+{
+  FAA(&q->C, 1);
+  return (void *) (long) *th;
+}
 
-#endif

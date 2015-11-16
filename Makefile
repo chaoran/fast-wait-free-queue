@@ -1,4 +1,4 @@
-TESTS = wfqueue lcrq ccqueue msqueue#faa
+TESTS = wfqueue wfqueue0 lcrq ccqueue msqueue faa
 
 CC = gcc
 CFLAGS = -g -O3 -pthread -D_GNU_SOURCE
@@ -23,6 +23,7 @@ wfqueue: CFLAGS += -DWFQUEUE
 lcrq: CFLAGS += -DLCRQ
 ccqueue: CFLAGS += -DCCQUEUE
 msqueue: CFLAGS += -DMSQUEUE
+faa: CFLAGS += -DFAAQ
 
 $(TESTS): harness.c pairwise.c
 
