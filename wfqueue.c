@@ -1,4 +1,3 @@
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "wfqueue.h"
@@ -342,8 +341,6 @@ void * dequeue(queue_t * q, handle_t * th)
 
 void queue_init(queue_t * q, int nprocs)
 {
-  printf("  Queue algorithm: wfqueue\n");
-
   q->Hi = 0;
   q->Hp = new_node();
 

@@ -19,15 +19,15 @@ mic biou: $(filter-out lcrq,$(TESTS))
 
 biou: CFLAGS += -DBIOU_COMPACT
 
-wfqueue: CFLAGS += -DWFQUEUE
+wfqueue wfqueue0: CFLAGS += -DWFQUEUE
 lcrq: CFLAGS += -DLCRQ
 ccqueue: CFLAGS += -DCCQUEUE
 msqueue: CFLAGS += -DMSQUEUE
 faa: CFLAGS += -DFAAQ
 
-$(TESTS): harness.c pairwise.c
+$(TESTS): harness.o pairwise.o
 
-msqueue lcrq: hzdptr.c xxhash.c
+msqueue lcrq: hzdptr.o xxhash.o
 
 clean:
 	rm -f $(TESTS) *.o
