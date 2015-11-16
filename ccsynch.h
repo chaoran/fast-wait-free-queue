@@ -34,15 +34,15 @@ void ccsynch_apply(ccsynch_t * synch, ccsynch_handle_t * handle,
   ccsynch_node_t * curr = SWAPra(&synch->tail, next);
   handle->next = curr;
 
-  int status = curr->status;
+  int status = ACQUIRE(&curr->status);
 
   if (status == CCSYNCH_WAIT) {
     curr->data = data;
     RELEASE(&curr->next, next);
 
     do {
-      status = ACQUIRE(&curr->status);
       PAUSE();
+      status = ACQUIRE(&curr->status);
     } while (status == CCSYNCH_WAIT);
   }
 
