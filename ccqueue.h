@@ -2,7 +2,6 @@
 #define CCQUEUE_H
 
 #ifdef CCQUEUE
-
 #include "ccsynch.h"
 
 #define EMPTY (void *) -1

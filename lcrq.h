@@ -1,6 +1,8 @@
 #ifndef LCRQ_H
 #define LCRQ_H
 
+#ifdef LCRQ
+
 #include "align.h"
 #include "hzdptr.h"
 
@@ -33,5 +35,7 @@ typedef struct {
   RingQueue * next;
   hzdptr_t hzdptr;
 } handle_t;
+
+#endif
 
 #endif /* end of include guard: LCRQ_H */

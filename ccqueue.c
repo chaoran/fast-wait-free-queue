@@ -1,6 +1,4 @@
-#include <stdint.h>
 #include <stdlib.h>
-#include "align.h"
 #include "delay.h"
 #include "ccqueue.h"
 

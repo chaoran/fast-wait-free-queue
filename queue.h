@@ -5,8 +5,12 @@
 #include "wfqueue.h"
 #elif LCRQ
 #include "lcrq.h"
+#elif CCQUEUE
+#include "ccqueue.h"
+#elif MSQUEUE
+#include "msqueue.h"
 #else
-#error "Please specify a queue implementation to use."
+#error "Please specify a queue implementation."
 #endif
 
 void queue_init(queue_t * q, int nprocs);

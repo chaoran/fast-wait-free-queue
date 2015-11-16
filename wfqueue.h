@@ -1,23 +1,24 @@
 #ifndef WFQUEUE_H
 #define WFQUEUE_H
 
-#include "align.h"
+#ifdef WFQUEUE
 
+#include "align.h"
 #define EMPTY ((void *) 0)
 
 #ifndef WFQUEUE_NODE_SIZE
 #define WFQUEUE_NODE_SIZE ((1 << 10) - 2)
 #endif
 
-CACHE_ALIGNED struct _enq_t {
+struct _enq_t {
   long volatile id;
   void * volatile val;
-};
+} CACHE_ALIGNED;
 
-CACHE_ALIGNED struct _deq_t {
+struct _deq_t {
   long volatile id;
   long volatile idx;
-};
+} CACHE_ALIGNED;
 
 struct _cell_t {
   void * volatile val;
@@ -110,5 +111,7 @@ typedef struct _handle_t {
    */
   int delay;
 } handle_t;
+
+#endif
 
 #endif /* end of include guard: WFQUEUE_H */

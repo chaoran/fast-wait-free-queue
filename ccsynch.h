@@ -67,7 +67,7 @@ void ccsynch_apply(ccsynch_t * synch, ccsynch_handle_t * handle,
   }
 }
 
-void ccsynch_init(ccsynch_t * synch)
+static void ccsynch_init(ccsynch_t * synch)
 {
   ccsynch_node_t * node = aligned_alloc(CACHE_LINE_SIZE, sizeof(ccsynch_node_t));
   node->next = NULL;
@@ -76,7 +76,7 @@ void ccsynch_init(ccsynch_t * synch)
   synch->tail = node;
 }
 
-void ccsynch_handle_init(ccsynch_handle_t * handle)
+static void ccsynch_handle_init(ccsynch_handle_t * handle)
 {
   handle->next = aligned_alloc(CACHE_LINE_SIZE, sizeof(ccsynch_node_t));
 }
