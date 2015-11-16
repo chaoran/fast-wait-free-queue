@@ -1,17 +1,17 @@
 #ifndef HZDPTR_H
 #define HZDPTR_H
 
-#include "atomic.h"
+#include "primitives.h"
+
+#define HZDPTR_THRESHOLD(nprocs) (2 * nprocs)
 
 typedef struct _hzdptr_t {
   struct _hzdptr_t * next;
   int nprocs;
   int nptrs;
   int nretired;
-  void * ptrs[0];
+  void ** ptrs;
 } hzdptr_t;
-
-#define HZDPTR_THRESHOLD(nprocs) (2 * nprocs)
 
 extern void hzdptr_init(hzdptr_t * hzd, int nprocs, int nptrs);
 extern void hzdptr_exit(hzdptr_t * hzd);
@@ -52,7 +52,9 @@ void * _hzdptr_setv(void volatile * ptr_, void * hzd_)
   do {
     *hzd = val;
     tmp = val;
-    mfence();
+
+    FENCE();
+
     val = *ptr;
   } while (val != tmp);
 
@@ -90,13 +92,13 @@ static void _hzdptr_enlist(hzdptr_t * hzd)
 
   if (tail == NULL) {
     hzd->next = hzd;
-    if (compare_and_swap(&_tail, &tail, hzd)) return;
+    if (CASra(&_tail, &tail, hzd)) return;
   }
 
   hzdptr_t * next = tail->next;
 
   do hzd->next = next;
-  while (!compare_and_swap(&tail->next, &next, hzd));
+  while (!CASra(&tail->next, &next, hzd));
 }
 
 #endif /* end of include guard: HZDPTR_H */

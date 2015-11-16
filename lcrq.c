@@ -1,12 +1,12 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include "lcrq.h"
 #include "align.h"
 #include "delay.h"
-#include "atomic.h"
 #include "hzdptr.h"
 
-#define RING_SIZE (1ull << 12)
+#define RING_SIZE LCRQ_RING_SIZE
 
 inline int is_empty(uint64_t v) __attribute__ ((pure));
 inline uint64_t node_index(uint64_t i) __attribute__ ((pure));
@@ -15,28 +15,13 @@ inline uint64_t node_unsafe(uint64_t i) __attribute__ ((pure));
 inline uint64_t tail_index(uint64_t t) __attribute__ ((pure));
 inline int crq_is_closed(uint64_t t) __attribute__ ((pure));
 
-typedef struct RingNode {
-  volatile uint64_t val;
-  volatile uint64_t idx;
-  uint64_t pad[14];
-} RingNode DOUBLE_CACHE_ALIGNED;
-
-typedef struct RingQueue {
-  volatile int64_t head DOUBLE_CACHE_ALIGNED;
-  volatile int64_t tail DOUBLE_CACHE_ALIGNED;
-  struct RingQueue *next DOUBLE_CACHE_ALIGNED;
-  RingNode array[RING_SIZE];
-} RingQueue DOUBLE_CACHE_ALIGNED;
-
-typedef struct _lcrq_t {
-  RingQueue * volatile head DOUBLE_CACHE_ALIGNED;
-  RingQueue * volatile tail DOUBLE_CACHE_ALIGNED;
-} lcrq_t;
+typedef struct _RingNode RingNode;
+typedef struct _RingQueue RingQueue;
 
 inline void init_ring(RingQueue *r) {
   int i;
 
-  for (i = 0; i < RING_SIZE; i++) {
+  for (i = 0; i < LCRQ_RING_SIZE; i++) {
     r->array[i].val = -1;
     r->array[i].idx = i;
   }
@@ -74,7 +59,7 @@ inline int crq_is_closed(uint64_t t) {
   return (t & (1ull << 63)) != 0;
 }
 
-void lcrq_init(lcrq_t * q)
+void queue_init(queue_t * q, int nprocs)
 {
   int i;
 
@@ -83,6 +68,7 @@ void lcrq_init(lcrq_t * q)
 
   q->head = rq;
   q->tail = rq;
+  q->nprocs = nprocs;
 }
 
 inline void fixState(RingQueue *rq) {
@@ -97,28 +83,23 @@ inline void fixState(RingQueue *rq) {
       continue;
 
     if (h > t) {
-      if (compare_and_swap(&rq->tail, &t, h)) break;
+      if (CAS(&rq->tail, &t, h)) break;
       continue;
     }
     break;
   }
 }
 
-typedef struct _lcrq_handle_t {
-  RingQueue * next;
-  hzdptr_t hzdptr;
-} lcrq_handle_t;
-
 inline int close_crq(RingQueue *rq, const uint64_t t, const int tries) {
   uint64_t tt = t + 1;
 
   if (tries < 10)
-    return compare_and_swap(&rq->tail, &tt, tt|(1ull<<63));
+    return CAS(&rq->tail, &tt, tt|(1ull<<63));
   else
-    return atomic_btas(&rq->tail, 63);
+    return BTAS(&rq->tail, 63);
 }
 
-static void lcrq_put(lcrq_t * q, lcrq_handle_t * handle, uint64_t arg) {
+void enqueue(queue_t * q, handle_t * handle, void * arg) {
   int try_close = 0;
 
   while (1) {
@@ -126,11 +107,11 @@ static void lcrq_put(lcrq_t * q, lcrq_handle_t * handle, uint64_t arg) {
     RingQueue *next = rq->next;
 
     if (next != NULL) {
-      compare_and_swap(&q->tail, &rq, next);
+      CAS(&q->tail, &rq, next);
       continue;
     }
 
-    uint64_t t = fetch_and_add(&rq->tail, 1);
+    uint64_t t = FAA(&rq->tail, 1);
 
     if (crq_is_closed(t)) {
       RingQueue * nrq;
@@ -147,8 +128,8 @@ alloc:
       nrq->array[0].val = (uint64_t) arg;
       nrq->array[0].idx = 0;
 
-      if (compare_and_swap(&rq->next, &next, nrq)) {
-        compare_and_swap(&q->tail, &rq, nrq);
+      if (CAS(&rq->next, &next, nrq)) {
+        CAS(&q->tail, &rq, nrq);
         handle->next = NULL;
         return;
       }
@@ -163,7 +144,7 @@ alloc:
     if (is_empty(val)) {
       if (node_index(idx) <= t) {
         if ((!node_unsafe(idx) || rq->head < t) &&
-            atomic_dcas(cell, &val, &idx, arg, t)) {
+            CAS2(cell, &val, &idx, arg, t)) {
           return;
         }
       }
@@ -180,12 +161,12 @@ alloc:
   hzdptr_clear(&handle->hzdptr, 0);
 }
 
-static uint64_t lcrq_get(lcrq_t * q, lcrq_handle_t * handle) {
+void * dequeue(queue_t * q, handle_t * handle) {
   while (1) {
     RingQueue *rq = hzdptr_setv(&q->head, &handle->hzdptr, 0);
     RingQueue *next;
 
-    uint64_t h = fetch_and_add(&rq->head, 1);
+    uint64_t h = FAA(&rq->head, 1);
 
     RingNode* cell = &rq->array[h & (RING_SIZE-1)];
 
@@ -203,10 +184,10 @@ static uint64_t lcrq_get(lcrq_t * q, lcrq_handle_t * handle) {
 
       if (!is_empty(val)) {
         if (idx == h) {
-          if (atomic_dcas(cell, &val, &cell_idx, -1, unsafe | h + RING_SIZE))
-            return val;
+          if (CAS2(cell, &val, &cell_idx, -1, unsafe | h + RING_SIZE))
+            return (void *) val;
         } else {
-          if (atomic_dcas(cell, &val, &cell_idx, val, set_unsafe(idx))) {
+          if (CAS2(cell, &val, &cell_idx, val, set_unsafe(idx))) {
             break;
           }
         }
@@ -219,12 +200,12 @@ static uint64_t lcrq_get(lcrq_t * q, lcrq_handle_t * handle) {
         uint64_t t = tail_index(tt);
 
         if (unsafe) { // Nothing to do, move along
-          if (atomic_dcas(cell, &val, &cell_idx, val, unsafe | h + RING_SIZE))
+          if (CAS2(cell, &val, &cell_idx, val, unsafe | h + RING_SIZE))
             break;
         } else if (t < h + 1 || r > 200000 || crq_closed) {
-          if (atomic_dcas(cell, &val, &idx, val, h + RING_SIZE)) {
+          if (CAS2(cell, &val, &idx, val, h + RING_SIZE)) {
             if (r > 200000 && tt > RING_SIZE)
-              atomic_btas(&rq->tail, 63);
+              BTAS(&rq->tail, 63);
             break;
           }
         } else {
@@ -238,9 +219,9 @@ static uint64_t lcrq_get(lcrq_t * q, lcrq_handle_t * handle) {
       // try to return empty
       next = rq->next;
       if (next == NULL)
-        return -1;  // EMPTY
+        return (void *) -1;  // EMPTY
       if (tail_index(rq->tail) <= h + 1) {
-        if (compare_and_swap(&q->head, &rq, next)) {
+        if (CAS(&q->head, &rq, next)) {
           hzdptr_retire(&handle->hzdptr, rq);
         }
       }
@@ -250,29 +231,8 @@ static uint64_t lcrq_get(lcrq_t * q, lcrq_handle_t * handle) {
   hzdptr_clear(&handle->hzdptr, 0);
 }
 
-void * init(int nprocs)
+void queue_register(queue_t * q, handle_t * th, int id)
 {
-  lcrq_t * q = align_malloc(sizeof(lcrq_t), PAGE_SIZE);
-  lcrq_init(q);
-  return q;
+  hzdptr_init(&th->hzdptr, q->nprocs, 1);
 }
 
-void * thread_init(int nprocs, int id, void * q)
-{
-  size_t size = sizeof(lcrq_handle_t) + hzdptr_size(nprocs, 1);
-  lcrq_handle_t * th = align_malloc(size, PAGE_SIZE);
-  hzdptr_init(&th->hzdptr, nprocs, 1);
-  return th;
-}
-
-void enqueue(void * q, void * th, void * val)
-{
-  lcrq_put((lcrq_t *) q, (lcrq_handle_t *) th, (uint64_t) val);
-}
-
-void * dequeue(void * q, void * th)
-{
-  return (void *) lcrq_get((lcrq_t *) q, (lcrq_handle_t *) th);
-}
-
-void * EMPTY = (void *) -1;

@@ -3,11 +3,11 @@
 
 #include "align.h"
 
+#define EMPTY ((void *) 0)
+
 #ifndef WFQUEUE_NODE_SIZE
 #define WFQUEUE_NODE_SIZE ((1 << 10) - 2)
 #endif
-
-#define EMPTY ((void *) 0)
 
 CACHE_ALIGNED struct _enq_t {
   long volatile id;
@@ -110,10 +110,5 @@ typedef struct _handle_t {
    */
   int delay;
 } handle_t;
-
-void queue_init(queue_t * q, int nprocs);
-void queue_register(queue_t * q, handle_t * th);
-void enqueue(queue_t * q, handle_t * th, void * v);
-void * dequeue(queue_t * q, handle_t * th);
 
 #endif /* end of include guard: WFQUEUE_H */

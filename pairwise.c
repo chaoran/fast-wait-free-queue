@@ -30,7 +30,7 @@ void init(int nprocs, int logn) {
 
 void thread_init(int id, int nprocs) {
   hds[id] = aligned_alloc(PAGE_SIZE, sizeof(handle_t));
-  queue_register(q, hds[id]);
+  queue_register(q, hds[id], id);
 }
 
 void * benchmark(int id, int nprocs) {

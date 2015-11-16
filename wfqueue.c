@@ -353,7 +353,7 @@ void queue_init(queue_t * q, int nprocs)
   q->nprocs = nprocs;
 }
 
-void queue_register(queue_t * q, handle_t * th)
+void queue_register(queue_t * q, handle_t * th, int id)
 {
   th->next = NULL;
   th->Hp = NULL;
