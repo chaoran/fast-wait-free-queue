@@ -99,6 +99,38 @@ static inline void * _acquire(void * volatile * p) {
 
 #if defined(__x86_64__) || defined(_M_X64_)
 #define PAUSE() __asm__ ("pause")
+
+static inline
+int _CAS2(volatile long * ptr, long * cmp1, long * cmp2,
+    long val1, long val2)
+{
+  char success;
+  long tmp1 = *cmp1;
+  long tmp2 = *cmp2;
+
+  __asm__ __volatile__(
+      "lock cmpxchg16b %1\n"
+      "setz %0"
+      : "=q" (success), "+m" (*ptr), "+a" (tmp1), "+d" (tmp2)
+      : "b" (val1), "c" (val2)
+      : "cc" );
+
+  *cmp1 = tmp1;
+  *cmp2 = tmp2;
+  return success;
+}
+#define CAS2(p, o1, o2, n1, n2) \
+  _CAS2((volatile long *) p, \
+      (long *) o1, (long *) o2, (long) n1, (long) n2)
+
+#define BTAS(ptr, bit) ({ \
+  char __ret; \
+  __asm__ __volatile__( \
+      "lock btsq %2, %0; setnc %1" \
+      : "+m" (*ptr), "=r" (__ret) : "ri" (bit) : "cc" ); \
+  __ret; \
+})
+
 #else
 #define PAUSE()
 #endif

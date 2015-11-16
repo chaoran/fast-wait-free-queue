@@ -60,9 +60,7 @@ void hzdptr_init(hzdptr_t * hzd, int nprocs, int nptrs)
   hzd->nprocs = nprocs;
   hzd->nptrs  = nptrs;
   hzd->nretired = 0;
-  memset(hzd->ptrs, 0, hzdptr_size(nprocs, nptrs));
-
-  release_fence();
+  hzd->ptrs = calloc(hzdptr_size(nprocs, nptrs), 1);
 
   _hzdptr_enlist(hzd);
 }

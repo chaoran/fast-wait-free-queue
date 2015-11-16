@@ -3,8 +3,8 @@
 #include <string.h>
 #include "align.h"
 #include "delay.h"
-#include "atomic.h"
 #include "hzdptr.h"
+#include "primitives.h"
 
 #define RING_SIZE (1ull << 12)
 
@@ -97,7 +97,7 @@ inline void fixState(RingQueue *rq) {
       continue;
 
     if (h > t) {
-      if (compare_and_swap(&rq->tail, &t, h)) break;
+      if (CAS(&rq->tail, &t, h)) break;
       continue;
     }
     break;
@@ -113,9 +113,9 @@ inline int close_crq(RingQueue *rq, const uint64_t t, const int tries) {
   uint64_t tt = t + 1;
 
   if (tries < 10)
-    return compare_and_swap(&rq->tail, &tt, tt|(1ull<<63));
+    return CAS(&rq->tail, &tt, tt|(1ull<<63));
   else
-    return atomic_btas(&rq->tail, 63);
+    return BTAS(&rq->tail, 63);
 }
 
 static void lcrq_put(lcrq_t * q, lcrq_handle_t * handle, uint64_t arg) {
@@ -126,11 +126,11 @@ static void lcrq_put(lcrq_t * q, lcrq_handle_t * handle, uint64_t arg) {
     RingQueue *next = rq->next;
 
     if (next != NULL) {
-      compare_and_swap(&q->tail, &rq, next);
+      CAS(&q->tail, &rq, next);
       continue;
     }
 
-    uint64_t t = fetch_and_add(&rq->tail, 1);
+    uint64_t t = FAA(&rq->tail, 1);
 
     if (crq_is_closed(t)) {
       RingQueue * nrq;
@@ -147,8 +147,8 @@ alloc:
       nrq->array[0].val = (uint64_t) arg;
       nrq->array[0].idx = 0;
 
-      if (compare_and_swap(&rq->next, &next, nrq)) {
-        compare_and_swap(&q->tail, &rq, nrq);
+      if (CAS(&rq->next, &next, nrq)) {
+        CAS(&q->tail, &rq, nrq);
         handle->next = NULL;
         return;
       }
@@ -163,7 +163,7 @@ alloc:
     if (is_empty(val)) {
       if (node_index(idx) <= t) {
         if ((!node_unsafe(idx) || rq->head < t) &&
-            atomic_dcas(cell, &val, &idx, arg, t)) {
+            CAS2(cell, &val, &idx, arg, t)) {
           return;
         }
       }
@@ -185,7 +185,7 @@ static uint64_t lcrq_get(lcrq_t * q, lcrq_handle_t * handle) {
     RingQueue *rq = hzdptr_setv(&q->head, &handle->hzdptr, 0);
     RingQueue *next;
 
-    uint64_t h = fetch_and_add(&rq->head, 1);
+    uint64_t h = FAA(&rq->head, 1);
 
     RingNode* cell = &rq->array[h & (RING_SIZE-1)];
 
@@ -203,10 +203,10 @@ static uint64_t lcrq_get(lcrq_t * q, lcrq_handle_t * handle) {
 
       if (!is_empty(val)) {
         if (idx == h) {
-          if (atomic_dcas(cell, &val, &cell_idx, -1, unsafe | h + RING_SIZE))
+          if (CAS2(cell, &val, &cell_idx, -1, unsafe | h + RING_SIZE))
             return val;
         } else {
-          if (atomic_dcas(cell, &val, &cell_idx, val, set_unsafe(idx))) {
+          if (CAS2(cell, &val, &cell_idx, val, set_unsafe(idx))) {
             break;
           }
         }
@@ -219,12 +219,12 @@ static uint64_t lcrq_get(lcrq_t * q, lcrq_handle_t * handle) {
         uint64_t t = tail_index(tt);
 
         if (unsafe) { // Nothing to do, move along
-          if (atomic_dcas(cell, &val, &cell_idx, val, unsafe | h + RING_SIZE))
+          if (CAS2(cell, &val, &cell_idx, val, unsafe | h + RING_SIZE))
             break;
         } else if (t < h + 1 || r > 200000 || crq_closed) {
-          if (atomic_dcas(cell, &val, &idx, val, h + RING_SIZE)) {
+          if (CAS2(cell, &val, &idx, val, h + RING_SIZE)) {
             if (r > 200000 && tt > RING_SIZE)
-              atomic_btas(&rq->tail, 63);
+              BTAS(&rq->tail, 63);
             break;
           }
         } else {
@@ -240,7 +240,7 @@ static uint64_t lcrq_get(lcrq_t * q, lcrq_handle_t * handle) {
       if (next == NULL)
         return -1;  // EMPTY
       if (tail_index(rq->tail) <= h + 1) {
-        if (compare_and_swap(&q->head, &rq, next)) {
+        if (CAS(&q->head, &rq, next)) {
           hzdptr_retire(&handle->hzdptr, rq);
         }
       }
@@ -259,7 +259,7 @@ void * init(int nprocs)
 
 void * thread_init(int nprocs, int id, void * q)
 {
-  size_t size = sizeof(lcrq_handle_t) + hzdptr_size(nprocs, 1);
+  size_t size = sizeof(lcrq_handle_t);
   lcrq_handle_t * th = align_malloc(size, PAGE_SIZE);
   hzdptr_init(&th->hzdptr, nprocs, 1);
   return th;
