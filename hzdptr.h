@@ -3,8 +3,6 @@
 
 #include "primitives.h"
 
-#define HZDPTR_THRESHOLD(nprocs) (2 * nprocs)
-
 typedef struct _hzdptr_t {
   struct _hzdptr_t * next;
   int nprocs;
@@ -12,6 +10,8 @@ typedef struct _hzdptr_t {
   int nretired;
   void ** ptrs;
 } hzdptr_t;
+
+#define HZDPTR_THRESHOLD(nprocs) (2 * nprocs)
 
 extern void hzdptr_init(hzdptr_t * hzd, int nprocs, int nptrs);
 extern void hzdptr_exit(hzdptr_t * hzd);
@@ -52,9 +52,7 @@ void * _hzdptr_setv(void volatile * ptr_, void * hzd_)
   do {
     *hzd = val;
     tmp = val;
-
     FENCE();
-
     val = *ptr;
   } while (val != tmp);
 

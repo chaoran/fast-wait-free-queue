@@ -122,12 +122,13 @@ int _CAS2(volatile long * ptr, long * cmp1, long * cmp2, long val1, long val2)
   _CAS2((volatile long *) p, (long *) o1, (long *) o2, (long) n1, (long) n2)
 
 #define BTAS(ptr, bit) ({ \
-    char __ret; \
-    __asm__ __volatile__( \
+  char __ret; \
+  __asm__ __volatile__( \
       "lock btsq %2, %0; setnc %1" \
       : "+m" (*ptr), "=r" (__ret) : "ri" (bit) : "cc" ); \
-    __ret; \
+  __ret; \
 })
+
 #else
 #define PAUSE()
 #endif

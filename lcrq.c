@@ -5,6 +5,7 @@
 #include "align.h"
 #include "delay.h"
 #include "hzdptr.h"
+#include "primitives.h"
 
 #define RING_SIZE LCRQ_RING_SIZE
 
@@ -15,13 +16,10 @@ inline uint64_t node_unsafe(uint64_t i) __attribute__ ((pure));
 inline uint64_t tail_index(uint64_t t) __attribute__ ((pure));
 inline int crq_is_closed(uint64_t t) __attribute__ ((pure));
 
-typedef struct _RingNode RingNode;
-typedef struct _RingQueue RingQueue;
-
 inline void init_ring(RingQueue *r) {
   int i;
 
-  for (i = 0; i < LCRQ_RING_SIZE; i++) {
+  for (i = 0; i < RING_SIZE; i++) {
     r->array[i].val = -1;
     r->array[i].idx = i;
   }
@@ -61,8 +59,6 @@ inline int crq_is_closed(uint64_t t) {
 
 void queue_init(queue_t * q, int nprocs)
 {
-  int i;
-
   RingQueue *rq = malloc(sizeof(RingQueue));
   init_ring(rq);
 
@@ -99,7 +95,7 @@ inline int close_crq(RingQueue *rq, const uint64_t t, const int tries) {
     return BTAS(&rq->tail, 63);
 }
 
-void enqueue(queue_t * q, handle_t * handle, void * arg) {
+static void lcrq_put(queue_t * q, handle_t * handle, uint64_t arg) {
   int try_close = 0;
 
   while (1) {
@@ -161,7 +157,7 @@ alloc:
   hzdptr_clear(&handle->hzdptr, 0);
 }
 
-void * dequeue(queue_t * q, handle_t * handle) {
+static uint64_t lcrq_get(queue_t * q, handle_t * handle) {
   while (1) {
     RingQueue *rq = hzdptr_setv(&q->head, &handle->hzdptr, 0);
     RingQueue *next;
@@ -185,7 +181,7 @@ void * dequeue(queue_t * q, handle_t * handle) {
       if (!is_empty(val)) {
         if (idx == h) {
           if (CAS2(cell, &val, &cell_idx, -1, unsafe | h + RING_SIZE))
-            return (void *) val;
+            return val;
         } else {
           if (CAS2(cell, &val, &cell_idx, val, set_unsafe(idx))) {
             break;
@@ -219,7 +215,7 @@ void * dequeue(queue_t * q, handle_t * handle) {
       // try to return empty
       next = rq->next;
       if (next == NULL)
-        return (void *) -1;  // EMPTY
+        return -1;  // EMPTY
       if (tail_index(rq->tail) <= h + 1) {
         if (CAS(&q->head, &rq, next)) {
           hzdptr_retire(&handle->hzdptr, rq);
@@ -234,5 +230,15 @@ void * dequeue(queue_t * q, handle_t * handle) {
 void queue_register(queue_t * q, handle_t * th, int id)
 {
   hzdptr_init(&th->hzdptr, q->nprocs, 1);
+}
+
+void enqueue(queue_t * q, handle_t * th, void * val)
+{
+  lcrq_put(q, th, (uint64_t) val);
+}
+
+void * dequeue(queue_t * q, handle_t * th)
+{
+  return (void *) lcrq_get(q, th);
 }
 

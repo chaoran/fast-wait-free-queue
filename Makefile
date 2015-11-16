@@ -1,7 +1,7 @@
 TESTS = wfqueue lcrq#ccqueue msqueue faa
 
 CC = gcc
-CFLAGS = -g -O2 -pthread -D_GNU_SOURCE
+CFLAGS = -g -O3 -pthread -D_GNU_SOURCE
 LDLIBS = -lpthread -lm
 
 all: $(TESTS)
