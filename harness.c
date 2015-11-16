@@ -1,54 +1,42 @@
 #include <math.h>
-#include <time.h>
 #include <stdio.h>
+#include <limits.h>
 #include <stdlib.h>
+#include <stdint.h>
+#include <unistd.h>
 #include <pthread.h>
 #include <sys/time.h>
-#include "event.h"
-#include "harness.h"
-
-#ifndef NUM_MEASS
-#define NUM_MEASS 5
-#endif
+#include "bits.h"
+#include "cpumap.h"
+#include "benchmark.h"
 
 #ifndef NUM_ITERS
-#define NUM_ITERS 20
+#define NUM_ITERS 5
+#endif
+
+#ifndef MAX_PROCS
+#define MAX_PROCS 512
+#endif
+
+#ifndef MAX_ITERS
+#define MAX_ITERS 20
 #endif
 
 #ifndef COV_THRESHOLD
 #define COV_THRESHOLD 0.02
 #endif
 
-extern void * init(int nprocs);
-extern void * thread_init(int nprocs, int id, void * global);
-
-extern int _nops;
-extern int bench(int nprocs, int id, void * global, void * local);
-extern int verify(int nprocs, int * results);
-
-extern int cpumap(int id, int nprocs);
-
-static double times[NUM_ITERS];
-static double means[NUM_ITERS];
-static double covs[NUM_ITERS];
 static pthread_barrier_t barrier;
+static double times[MAX_ITERS];
+static double means[MAX_ITERS];
+static double covs[MAX_ITERS];
 static volatile int target;
-static int nprocs;
-static size_t * buffer;
-static int * results;
-static void * global;
-static void * local;
 
-#ifdef ENABLE_EVENTS
-char ** eventNames;
-size_t * eventResults;
-#endif
-
-static size_t elapsed_time(size_t ms)
+static size_t elapsed_time(size_t us)
 {
   struct timeval t;
   gettimeofday(&t, NULL);
-  return t.tv_sec * 1000000 + t.tv_usec - ms;
+  return t.tv_sec * 1000000 + t.tv_usec - us;
 }
 
 static double compute_mean(const double * times)
@@ -56,11 +44,11 @@ static double compute_mean(const double * times)
   int i;
   double sum = 0;
 
-  for (i = 0; i < NUM_MEASS; ++i) {
+  for (i = 0; i < NUM_ITERS; ++i) {
     sum += times[i];
   }
 
-  return sum / NUM_MEASS;
+  return sum / NUM_ITERS;
 }
 
 static double compute_cov(const double * times, double mean)
@@ -68,26 +56,26 @@ static double compute_cov(const double * times, double mean)
   double variance = 0;
 
   int i;
-  for (i = 0; i < NUM_MEASS; ++i) {
+  for (i = 0; i < NUM_ITERS; ++i) {
     variance += (times[i] - mean) * (times[i] - mean);
   }
 
-  variance /= NUM_MEASS;
+  variance /= NUM_ITERS;
 
   double cov = sqrt(variance);;
   cov /= mean;
   return cov;
 }
 
-static size_t reduce_min(size_t val, int id)
+static size_t reduce_min(long val, int id, int nprocs)
 {
-  buffer[id] = val;
+  static long buffer[MAX_PROCS];
 
+  buffer[id] = val;
   pthread_barrier_wait(&barrier);
 
-  size_t min = -1;
+  long min = LONG_MAX;
   int i;
-
   for (i = 0; i < nprocs; ++i) {
     if (buffer[i] < min) min = buffer[i];
   }
@@ -95,32 +83,16 @@ static size_t reduce_min(size_t val, int id)
   return min;
 }
 
-static size_t reduce_sum(size_t val, int id)
+static void report(int id, int nprocs, int i, long us)
 {
-  buffer[id] = val;
-  pthread_barrier_wait(&barrier);
-
-  size_t sum = 0;
-  int i;
-
-  for (i = 0; i < nprocs; ++i) {
-    sum += buffer[i];
-  }
-
-  pthread_barrier_wait(&barrier);
-  return sum;
-}
-
-static int report_result(int id, int i, size_t ms)
-{
-  ms = reduce_min(ms, id);
+  long ms = reduce_min(us, id, nprocs);
 
   if (id == 0) {
     times[i] = ms / 1000.0;
     printf("  #%d elapsed time: %.2f ms\n", i + 1, times[i]);
 
-    if (i + 1 >= NUM_MEASS) {
-      int n = i + 1 - NUM_MEASS;
+    if (i + 1 >= NUM_ITERS) {
+      int n = i + 1 - NUM_ITERS;
 
       means[i] = compute_mean(times + n);
       covs[i] = compute_cov(times + n, means[i]);
@@ -132,131 +104,114 @@ static int report_result(int id, int i, size_t ms)
   }
 
   pthread_barrier_wait(&barrier);
-  return target;
 }
 
-int harness_init(const char * name, int n)
+static void * thread(void * bits)
 {
-  nprocs = n;
+  int id = bits_hi(bits);
+  int nprocs = bits_lo(bits);
 
-  printf("===========================================\n");
-  printf("  Benchmark: %s\n", name);
-  printf("  Number of processors: %d\n", nprocs);
-  printf("  Input size: %d\n", _nops);
+  cpu_set_t set;
+  CPU_ZERO(&set);
 
-  pthread_barrier_init(&barrier, NULL, nprocs);
-  buffer = malloc(sizeof(size_t [nprocs]));
-  results = malloc(sizeof(int [nprocs]));
+  int cpu = cpumap(id, nprocs);
+  CPU_SET(cpu, &set);
+  sched_setaffinity(0, sizeof(set), &set);
 
-  global = init(nprocs);
-
-#ifdef ENABLE_EVENTS
-  int nevents = event_count();
-
-  if (nevents > 0) {
-    eventNames = malloc(sizeof(char * [nevents]));
-    eventResults = malloc(sizeof(size_t [nevents]));
-    event_names(eventNames);
-    event_init(nprocs);
-  }
-#endif
-
-  return 0;
-}
-
-int harness_exec(int id)
-{
-  int i;
-  int result;
-
-#ifdef ENABLE_EVENTS
-  long long * events;
-  int nevents = event_count();
-
-  if (nevents > 0) {
-    events = malloc(sizeof(long long [nevents]));
-
-    for (i = 0; i < nevents; ++i) {
-      events[i] = 0;
-    }
-
-    event_thread_init(id);
-  }
-#endif
-
-  void * local = thread_init(nprocs, id, global);
-
+  thread_init(id, nprocs);
   pthread_barrier_wait(&barrier);
 
-#ifdef ENABLE_EVENTS
-  if (nevents > 0) event_start(id);
-#endif
-
-  for (i = 0; i < NUM_ITERS; ++i) {
-    size_t ms = elapsed_time(0);
-    result = bench(nprocs, id, global, local);
+  int i;
+  void * result;
+  for (i = 0; i < MAX_ITERS && target == 0; ++i) {
+    long us = elapsed_time(0);
+    result = benchmark(id, nprocs);
     pthread_barrier_wait(&barrier);
-
-    ms = elapsed_time(ms);
-    if (report_result(id, i, ms)) break;
+    us = elapsed_time(us);
+    report(id, nprocs, i, us);
   }
 
-#ifdef ENABLE_EVENTS
-  if (nevents > 0) {
-    event_stop(id, events);
-
-    int i;
-    for (i = 0; i < nevents; ++i) {
-      eventResults[i] = reduce_sum(events[i], id);
-    }
-
-    free(events);
-  }
-#endif
-
-  results[id] = result;
-  return 0;
+  return result;
 }
 
-int harness_exit()
+int main(int argc, const char *argv[])
 {
-  int iter = target;
+  int nprocs = 0;
+  int n = 0;
 
-  if (iter == 0) {
-    iter = NUM_MEASS - 1;
-    double cov = covs[iter];
+  /** The first argument is nprocs. */
+  if (argc > 1) {
+    nprocs = atoi(argv[1]);
+  }
+
+  /**
+   * Use the number of processors online as nprocs if it is not
+   * specified.
+   */
+  if (nprocs == 0) {
+    nprocs = sysconf(_SC_NPROCESSORS_ONLN);
+  }
+
+  if (nprocs <= 0) return 1;
+  else {
+    /** Set concurrency level. */
+    pthread_setconcurrency(nprocs);
+  }
+
+  /**
+   * The second argument is input size n.
+   */
+  if (argc > 2) {
+    n = atoi(argv[2]);
+  }
+
+  pthread_barrier_init(&barrier, NULL, nprocs);
+  printf("===========================================\n");
+  printf("  Benchmark: %s\n", argv[0]);
+  printf("  Number of processors: %d\n", nprocs);
+
+  init(nprocs, n);
+
+  pthread_t ths[nprocs];
+  void * res[nprocs];
+
+  int i;
+  for (i = 1; i < nprocs; i++) {
+    pthread_create(&ths[i], NULL, thread, bits_join(i, nprocs));
+  }
+
+  res[0] = thread(bits_join(0, nprocs));
+
+  for (i = 1; i < nprocs; i++) {
+    pthread_join(ths[i], &res[i]);
+  }
+
+  if (target == 0) {
+    target = NUM_ITERS - 1;
+    double minCov = covs[target];
 
     /** Pick the result that has the lowest CoV. */
     int i;
-
-    for (i = NUM_MEASS; i < NUM_ITERS; ++i) {
-      if (covs[i] < cov) {
-        cov = covs[i];
-        iter = i;
+    for (i = NUM_ITERS; i < MAX_ITERS; ++i) {
+      if (covs[i] < minCov) {
+        minCov = covs[i];
+        target = i;
       }
     }
   }
 
-  double mean = means[iter];
-  double cov = covs[iter];
+  double mean = means[target];
+  double cov = covs[target];
+  int i1 = target - NUM_ITERS + 2;
+  int i2 = target + 1;
 
-  printf("  Steady-state iterations: %d~%d (cov=%.2f)\n",
-      iter - NUM_MEASS + 2, iter + 1, cov);
-  printf("  Number of measurements: %d\n", NUM_MEASS);
+  printf("  Steady-state iterations: %d~%d\n", i1, i2);
+  printf("  Coefficient of variation: %.2f\n", cov);
+  printf("  Number of measurements: %d\n", NUM_ITERS);
   printf("  Mean of elapsed time: %.2f ms\n", mean);
-
-#ifdef ENABLE_EVENTS
-  int i;
-  for (i = 0; i < event_count(); ++i) {
-    printf("  Event: %s %ld\n", eventNames[i], eventResults[i]);
-  }
-#endif
-
   printf("===========================================\n");
 
   pthread_barrier_destroy(&barrier);
-  free(buffer);
-
-  return verify(nprocs, results);
+  return verify(nprocs, res);
 }
 

@@ -1,7 +1,7 @@
-TESTS = wfqueue wfqueue0 lcrq ccqueue msqueue faa
+TESTS = wfqueue#lcrq ccqueue msqueue faa
 
 CC = gcc
-CFLAGS = -g -O3 -DBENCHMARK -pthread
+CFLAGS = -g -pthread -D_GNU_SOURCE
 LDLIBS = -lpthread -lm
 
 all: $(TESTS)
@@ -19,7 +19,9 @@ mic biou: $(filter-out lcrq,$(TESTS))
 
 biou: CFLAGS += -DBIOU_COMPACT
 
-$(TESTS): cpumap.o main.o harness.o bench.o
+wfqueue: CFLAGS += -DWFQUEUE
+
+$(TESTS): harness.o pairwise.o
 
 msqueue lcrq: hzdptr.c xxhash.c
 

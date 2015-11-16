@@ -1,14 +1,18 @@
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "align.h"
+#include "wfqueue.h"
 #include "primitives.h"
 
-#define N ((1 << 10) - 2)
+#define N WFQUEUE_NODE_SIZE
 #define BOT ((void *) 0)
 #define TOP ((void *)-1)
 
 #define MAX_GARBAGE(n) (2 * n)
+
+#ifndef MAX_SPIN
 #define MAX_SPIN 1000
+#endif
 
 #ifndef MAX_PATIENCE
 #define MAX_PATIENCE 100
@@ -18,49 +22,10 @@
 #define MAX_DELAY 100
 #endif
 
-typedef struct CACHE_ALIGNED {
-  long volatile id;
-  void * volatile val;
-} enq_t;
-
-typedef struct CACHE_ALIGNED {
-  long volatile id;
-  long volatile idx;
-} deq_t;
-
-typedef struct _cell_t {
-  void * volatile val;
-  enq_t * volatile enq;
-  deq_t * volatile deq;
-  void * pad[6];
-} cell_t;
-
-typedef struct _node_t {
-  struct _node_t * volatile next CACHE_ALIGNED;
-  long id CACHE_ALIGNED;
-  cell_t cells[N] CACHE_ALIGNED;
-} node_t;
-
-typedef struct DOUBLE_CACHE_ALIGNED {
-  volatile long Ei DOUBLE_CACHE_ALIGNED;
-  volatile long Di DOUBLE_CACHE_ALIGNED;
-  volatile long Hi DOUBLE_CACHE_ALIGNED;
-  node_t * volatile Hp;
-  long nprocs;
-} wfqueue_t;
-
-typedef struct DOUBLE_CACHE_ALIGNED _handle_t {
-  struct _handle_t * next;
-  node_t * volatile Hp;
-  node_t * volatile Ep;
-  node_t * volatile Dp;
-  enq_t Er CACHE_ALIGNED;
-  deq_t Dr CACHE_ALIGNED;
-  struct _handle_t * Eh CACHE_ALIGNED;
-  struct _handle_t * Dh;
-  node_t * retired CACHE_ALIGNED;
-  int delay;
-} handle_t;
+typedef struct _enq_t enq_t;
+typedef struct _deq_t deq_t;
+typedef struct _cell_t cell_t;
+typedef struct _node_t node_t;
 
 static inline void * spin(void * volatile * p) {
   int patience = MAX_SPIN;
@@ -96,13 +61,13 @@ static node_t * update(node_t * volatile * pPn, node_t * cur,
   return cur;
 }
 
-static void cleanup(wfqueue_t * q, handle_t * th) {
+static void cleanup(queue_t * q, handle_t * th) {
   long oid = q->Hi;
   node_t * new = th->Dp;
 
   if (oid == -1) return;
   if (new->id - oid < MAX_GARBAGE(q->nprocs)) return;
-  if (!CASar(&q->Hi, &oid, -1)) return;
+  if (!CASa(&q->Hi, &oid, -1)) return;
 
   node_t * old = q->Hp;
   handle_t * ph = th;
@@ -149,18 +114,18 @@ static cell_t * find_cell(node_t * volatile * p, long i, handle_t * th) {
     node_t * n = c->next;
 
     if (n == NULL) {
-      node_t * t = th->retired;
+      node_t * t = th->spare;
 
       if (t == NULL) {
         t = new_node();
-        th->retired = t;
+        th->spare = t;
       }
 
       t->id = j + 1;
 
       if (CASra(&c->next, &n, t)) {
         n = t;
-        th->retired = NULL;
+        th->spare = NULL;
       }
     }
 
@@ -171,7 +136,7 @@ static cell_t * find_cell(node_t * volatile * p, long i, handle_t * th) {
   return &c->cells[i % N];
 }
 
-static int enq_fast(wfqueue_t * q, handle_t * th, void * v, long * id)
+static int enq_fast(queue_t * q, handle_t * th, void * v, long * id)
 {
   long i = FAAcs(&q->Ei, 1);
   cell_t * c = find_cell(&th->Ep, i, th);
@@ -185,7 +150,7 @@ static int enq_fast(wfqueue_t * q, handle_t * th, void * v, long * id)
   }
 }
 
-static void enq_slow(wfqueue_t * q, handle_t * th, void * v, long id)
+static void enq_slow(queue_t * q, handle_t * th, void * v, long id)
 {
   enq_t * enq = &th->Er;
   enq->val = v;
@@ -209,7 +174,7 @@ static void enq_slow(wfqueue_t * q, handle_t * th, void * v, long id)
   } while (enq->id > 0);
 }
 
-void wfenq(wfqueue_t * q, handle_t * th, void * v)
+void enqueue(queue_t * q, handle_t * th, void * v)
 {
   th->Hp = th->Ep;
 
@@ -221,7 +186,7 @@ void wfenq(wfqueue_t * q, handle_t * th, void * v)
   RELEASE(&th->Hp, NULL);
 }
 
-static void * help_enq(wfqueue_t * q, handle_t * th, cell_t * c, long i)
+static void * help_enq(queue_t * q, handle_t * th, cell_t * c, long i)
 {
   void * v = spin(&c->val);
 
@@ -267,7 +232,7 @@ static void * help_enq(wfqueue_t * q, handle_t * th, cell_t * c, long i)
   return c->val;
 }
 
-static void help_deq(wfqueue_t * q, handle_t * th, handle_t * ph)
+static void help_deq(queue_t * q, handle_t * th, handle_t * ph)
 {
   deq_t * deq = &ph->Dr;
   long id = ACQUIRE(&deq->id);
@@ -312,7 +277,7 @@ static void help_deq(wfqueue_t * q, handle_t * th, handle_t * ph)
   }
 }
 
-static void * deq_fast(wfqueue_t * q, handle_t * th, long * id)
+static void * deq_fast(queue_t * q, handle_t * th, long * id)
 {
   long i = FAAcs(&q->Di, 1);
   cell_t * c = find_cell(&th->Dp, i, th);
@@ -335,7 +300,7 @@ static void * deq_fast(wfqueue_t * q, handle_t * th, long * id)
   return TOP;
 }
 
-static void * deq_slow(wfqueue_t * q, handle_t * th, long id)
+static void * deq_slow(queue_t * q, handle_t * th, long id)
 {
   deq_t * deq = &th->Dr;
   deq->idx = -id;
@@ -353,7 +318,7 @@ static void * deq_slow(wfqueue_t * q, handle_t * th, long id)
   return val == TOP ? BOT : val;
 }
 
-void * wfdeq(wfqueue_t * q, handle_t * th)
+void * dequeue(queue_t * q, handle_t * th)
 {
   th->Hp = th->Dp;
 
@@ -367,16 +332,18 @@ void * wfdeq(wfqueue_t * q, handle_t * th)
 
   RELEASE(&th->Hp, NULL);
 
-  if (th->retired == NULL) {
+  if (th->spare == NULL) {
     cleanup(q, th);
-    th->retired = new_node();
+    th->spare = new_node();
   }
 
   return v;
 }
 
-void wfinit(wfqueue_t * q, long nprocs)
+void queue_init(queue_t * q, int nprocs)
 {
+  printf("  Queue algorithm: wfqueue\n");
+
   q->Hi = 0;
   q->Hp = new_node();
 
@@ -386,19 +353,20 @@ void wfinit(wfqueue_t * q, long nprocs)
   q->nprocs = nprocs;
 }
 
-void wfregister(wfqueue_t * q, handle_t * th)
+void queue_register(queue_t * q, handle_t * th)
 {
+  th->next = NULL;
+  th->Hp = NULL;
   th->Ep = q->Hp;
   th->Dp = q->Hp;
-  th->Hp = NULL;
-  th->next = NULL;
-  th->retired = new_node();
-  th->delay = 0;
 
   th->Er.id = 0;
   th->Er.val = BOT;
   th->Dr.id = 0;
   th->Dr.idx = 0;
+
+  th->spare = new_node();
+  th->delay = 0;
 
   static handle_t * volatile _tail;
   handle_t * tail = _tail;
@@ -420,28 +388,3 @@ void wfregister(wfqueue_t * q, handle_t * th)
   th->Dh = th->next;
 }
 
-void * init(int nprocs)
-{
-  wfqueue_t * q = align_malloc(sizeof(wfqueue_t), PAGE_SIZE);
-  wfinit(q, nprocs);
-  return q;
-}
-
-void * thread_init(int nprocs, int id, void * q)
-{
-  handle_t * th = align_malloc(sizeof(handle_t), PAGE_SIZE);
-  wfregister((wfqueue_t *) q, th);
-  return th;
-}
-
-void enqueue(void * q, void * th, void * val)
-{
-  wfenq((wfqueue_t *) q, (handle_t *) th, val);
-}
-
-void * dequeue(void * q, void * th)
-{
-  return wfdeq((wfqueue_t *) q, (handle_t *) th);
-}
-
-void * EMPTY = BOT;

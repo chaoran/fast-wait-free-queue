@@ -33,7 +33,7 @@
  * An atomic compare-and-swap that ensures acquire semantic when succeed
  * or relaxed semantic when failed.
  */
-#define CASar(ptr, cmp, val) __atomic_compare_exchange_n(ptr, cmp, val, 0, \
+#define CASa(ptr, cmp, val) __atomic_compare_exchange_n(ptr, cmp, val, 0, \
     __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)
 
 /**
@@ -80,7 +80,7 @@ _compare_and_swap(void ** ptr, void ** expected, void * desired) {
   _compare_and_swap((void **) ptr, (void **) expected, (void *) desired)
 #define CAScs CAS
 #define CASra CAS
-#define CASar CAS
+#define CASa  CAS
 
 static inline void * _acquire(void * volatile * p) {
   void * v = *p;
