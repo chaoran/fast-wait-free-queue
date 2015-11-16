@@ -6,6 +6,7 @@
 #define CACHE_ALIGNED __attribute__((aligned(CACHE_LINE_SIZE)))
 #define DOUBLE_CACHE_ALIGNED __attribute__((aligned(2 * CACHE_LINE_SIZE)))
 
+#ifndef _ISOC11_SOURCE
 #include <stddef.h>
 
 static inline void * aligned_alloc(size_t align, size_t size)
@@ -15,4 +16,5 @@ static inline void * aligned_alloc(size_t align, size_t size)
   return ptr;
 }
 
+#endif
 #endif /* end of include guard: ALIGN_H */
