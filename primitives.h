@@ -87,7 +87,7 @@ _compare_and_swap(void ** ptr, void ** expected, void * desired) {
   }
 }
 #define CAS(ptr, expected, desired) \
-  _compare_and_swap((void **) ptr, (void **) expected, (void *) desired)
+  _compare_and_swap((void **) (ptr), (void **) (expected), (void *) (desired))
 #define CAScs CAS
 #define CASra CAS
 #define CASa  CAS
