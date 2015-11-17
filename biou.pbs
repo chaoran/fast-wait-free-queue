@@ -1,0 +1,11 @@
+#PBS -N AE
+#PBS -q serial
+#PBS -l nodes=1:ppn=32,pmem=2000m,walltime=24:00:00
+#PBS -M chaoran@rice.edu
+#PBS -m abe
+#PBS -V
+
+echo "My job ran on:"
+cat $PBS_NODEFILE
+cd $PBS_O_WORKDIR
+PROCS=1:2:4:8:16:32 TESTS=wfqueue:wfqueue0:delay:faa:ccqueue:msqueue ./benchmark
