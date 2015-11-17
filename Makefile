@@ -1,4 +1,4 @@
-TESTS = wfqueue wfqueue0 lcrq ccqueue msqueue faa
+TESTS = wfqueue wfqueue0 lcrq ccqueue msqueue faa delay
 
 CC = gcc
 CFLAGS = -g -O3 -pthread -D_GNU_SOURCE
@@ -25,7 +25,9 @@ ccqueue: CFLAGS += -DCCQUEUE
 msqueue: CFLAGS += -DMSQUEUE
 faa: CFLAGS += -DFAAQ
 
-$(TESTS): harness.o pairwise.o
+$(TESTS): harness.o
+wfqueue wfqueue0 lcrq ccqueue msqueue faa: pairwise.o
+delay: delay.o
 
 msqueue lcrq: hzdptr.o xxhash.o
 
