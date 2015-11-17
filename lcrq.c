@@ -9,14 +9,14 @@
 
 #define RING_SIZE LCRQ_RING_SIZE
 
-inline int is_empty(uint64_t v) __attribute__ ((pure));
-inline uint64_t node_index(uint64_t i) __attribute__ ((pure));
-inline uint64_t set_unsafe(uint64_t i) __attribute__ ((pure));
-inline uint64_t node_unsafe(uint64_t i) __attribute__ ((pure));
-inline uint64_t tail_index(uint64_t t) __attribute__ ((pure));
-inline int crq_is_closed(uint64_t t) __attribute__ ((pure));
+static inline int is_empty(uint64_t v) __attribute__ ((pure));
+static inline uint64_t node_index(uint64_t i) __attribute__ ((pure));
+static inline uint64_t set_unsafe(uint64_t i) __attribute__ ((pure));
+static inline uint64_t node_unsafe(uint64_t i) __attribute__ ((pure));
+static inline uint64_t tail_index(uint64_t t) __attribute__ ((pure));
+static inline int crq_is_closed(uint64_t t) __attribute__ ((pure));
 
-inline void init_ring(RingQueue *r) {
+static inline void init_ring(RingQueue *r) {
   int i;
 
   for (i = 0; i < RING_SIZE; i++) {
@@ -59,7 +59,7 @@ inline int crq_is_closed(uint64_t t) {
 
 void queue_init(queue_t * q, int nprocs)
 {
-  RingQueue *rq = aligned_alloc(PAGE_SIZE, sizeof(RingQueue));
+  RingQueue *rq = align_malloc(PAGE_SIZE, sizeof(RingQueue));
   init_ring(rq);
 
   q->head = rq;
@@ -67,7 +67,7 @@ void queue_init(queue_t * q, int nprocs)
   q->nprocs = nprocs;
 }
 
-inline void fixState(RingQueue *rq) {
+static inline void fixState(RingQueue *rq) {
 
   uint64_t t, h, n;
 
@@ -86,7 +86,7 @@ inline void fixState(RingQueue *rq) {
   }
 }
 
-inline int close_crq(RingQueue *rq, const uint64_t t, const int tries) {
+static inline int close_crq(RingQueue *rq, const uint64_t t, const int tries) {
   uint64_t tt = t + 1;
 
   if (tries < 10)
@@ -115,7 +115,7 @@ alloc:
       nrq = handle->next;
 
       if (nrq == NULL) {
-        nrq = aligned_alloc(PAGE_SIZE, sizeof(RingQueue));
+        nrq = align_malloc(PAGE_SIZE, sizeof(RingQueue));
         init_ring(nrq);
       }
 

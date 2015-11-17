@@ -36,7 +36,7 @@ void queue_init(queue_t * queue, int nprocs)
   ccsynch_init(&queue->enq);
   ccsynch_init(&queue->deq);
 
-  node_t * dummy = aligned_alloc(CACHE_LINE_SIZE, sizeof(node_t));
+  node_t * dummy = align_malloc(CACHE_LINE_SIZE, sizeof(node_t));
   dummy->data = 0;
   dummy->next = NULL;
 
@@ -49,7 +49,7 @@ void queue_register(queue_t * queue, handle_t * handle, int id)
   ccsynch_handle_init(&handle->enq);
   ccsynch_handle_init(&handle->deq);
 
-  handle->next = aligned_alloc(CACHE_LINE_SIZE, sizeof(node_t));
+  handle->next = align_malloc(CACHE_LINE_SIZE, sizeof(node_t));
 }
 
 void enqueue(queue_t * queue, handle_t * handle, void * data)

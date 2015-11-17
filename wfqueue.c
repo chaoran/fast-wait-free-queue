@@ -39,7 +39,7 @@ static inline void * spin(void * volatile * p) {
 }
 
 static inline node_t * new_node() {
-  node_t * n = aligned_alloc(PAGE_SIZE, sizeof(node_t));
+  node_t * n = align_malloc(PAGE_SIZE, sizeof(node_t));
   memset(n, 0, sizeof(node_t));
   return n;
 }

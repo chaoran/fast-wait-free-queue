@@ -26,14 +26,14 @@ void init(int nprocs, int logn) {
 
   printf("  Number of operations: %d\n", nops);
 
-  q = aligned_alloc(PAGE_SIZE, sizeof(queue_t));
+  q = align_malloc(PAGE_SIZE, sizeof(queue_t));
   queue_init(q, nprocs);
 
-  hds = aligned_alloc(PAGE_SIZE, sizeof(handle_t * [nprocs]));
+  hds = align_malloc(PAGE_SIZE, sizeof(handle_t * [nprocs]));
 }
 
 void thread_init(int id, int nprocs) {
-  hds[id] = aligned_alloc(PAGE_SIZE, sizeof(handle_t));
+  hds[id] = align_malloc(PAGE_SIZE, sizeof(handle_t));
   queue_register(q, hds[id], id);
 }
 
