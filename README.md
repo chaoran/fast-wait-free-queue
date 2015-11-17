@@ -1,2 +1,1 @@
-# hpc-queue
-A scalable FIFO queue implementation.
+A benchmark framework for concurrent queue implementations.
