@@ -68,8 +68,7 @@ void * hzdptr_setv(void volatile * ptr, hzdptr_t * hzd, int idx)
 static inline
 void hzdptr_clear(hzdptr_t * hzd, int idx)
 {
-  release_fence();
-  hzd->ptrs[idx] = NULL;
+  RELEASE(&hzd->ptrs[idx], NULL);
 }
 
 static inline
