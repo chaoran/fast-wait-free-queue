@@ -71,7 +71,7 @@ where `id` is the id of the current thread, `nprocs` is the number of threads. `
 ## How to add a new queue implementation
 
 We use a generic pointer `void *` to represent a value that can be stored in the queue.
-A queue should implements the following interface.
+A queue should implements the queue interface, defined in `queue.h`.
 
 - `queue_t`: the struct type of the queue,
 - `handle_t`: a thread's handle to the queue, used to store thread local state,
@@ -80,3 +80,13 @@ A queue should implements the following interface.
 - `void enqueue(queue_t * q, handle_t * th, void * val)`: enqueues a value,
 - `void * dequeue(queue_t * q, handle_t * th)`: dequeues a value,
 - `EMPTY`: a value that will be returned if a `dequeue` fails.
+
+## How to add a new benchmark
+
+A benchmark should implement the benchmark interface, defined in `benchmark.h`, and interact with a queue using the queue interface.
+The benchmark interface includes:
+
+- `void init(int nprocs, int n)`: performs initilization of the benchmark; called only once at the beginning.
+- `void thread_init(int id, int nprocs)`: performs thread local initialization of the benchmark; called once per thread, after `init` but before `benchmark`.
+- `void * benchmark(int id, int nprocs)`: run the benchmark once, called by each thread to run the benchmark. Each call will be timed and report as one iteration. It can return a result, which will be passed to `verify` to verify correctness.
+- `int verify(int nprocs, void * results)`: should verify the result of each thread and return `0` on success and non-zero values on error.
