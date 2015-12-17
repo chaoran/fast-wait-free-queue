@@ -17,6 +17,7 @@ The framework currently contains one benchmark, `pairwise`, in which all threads
 - **Linux kernel 2.5.8 or later**
 - **glibc 2.3**: we use `sched_setaffinity` to bind threads to cores.
 - **atomic `CAS2`**: `lcrq` requires `CAS2`, a 16 Byte wide `compare-and-swap` primitive. This is available on most recent Intel processors and IBM Power8.
+- **jemalloc** (optional): `jemalloc` eliminates the bottleneck of the memory allocator. You can link with `jemalloc` by setting `JEMALLOC_PATH` environment variable to the path where your `jemalloc` is installed.
  
 ## How to install
 

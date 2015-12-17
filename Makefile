@@ -4,6 +4,11 @@ CC = gcc
 CFLAGS = -g -O3 -pthread -D_GNU_SOURCE
 LDLIBS = -lpthread -lm
 
+ifdef JEMALLOC_PATH
+	LDFLAGS += -L${JEMALLOC_PATH}/lib -Wl,-rpath,${JEMALLOC_PATH}/lib
+	LDLIBS += -ljemalloc
+endif
+
 all: $(TESTS)
 
 wfqueue0: CFLAGS += -DMAX_PATIENCE=0
