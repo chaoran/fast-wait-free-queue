@@ -1,13 +1,14 @@
 #ifndef DELAY_H
 #define DELAY_H
 
+#include <time.h>
 #include <stdlib.h>
 
 typedef struct drand48_data delay_t;
 
 static inline void delay_init(delay_t * state, int id)
 {
-  srand48_r(id + 1, state);
+  srand48_r(time(NULL) + id, state);
 }
 
 static inline void delay_exec(delay_t * state)
