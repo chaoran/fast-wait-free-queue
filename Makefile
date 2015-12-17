@@ -1,7 +1,7 @@
 TESTS = wfqueue wfqueue0 lcrq ccqueue msqueue faa delay
 
 CC = gcc
-CFLAGS = -g -O3 -pthread -D_GNU_SOURCE
+CFLAGS = -g -Wall -O3 -pthread -D_GNU_SOURCE
 LDLIBS = -lpthread -lm
 
 ifdef JEMALLOC_PATH

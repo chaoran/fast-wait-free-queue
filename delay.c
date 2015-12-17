@@ -18,7 +18,7 @@ void init(int nprocs, int logn) {
     nops *= 10;
   }
 
-  printf("  Number of operations: %d\n", nops);
+  printf("  Number of operations: %ld\n", nops);
 }
 
 void thread_init(int id, int nprocs) {}
@@ -32,6 +32,8 @@ void * benchmark(int id, int nprocs) {
     delay_exec(&state);
     delay_exec(&state);
   }
+
+  return NULL;
 }
 
 int verify() { return 1; }

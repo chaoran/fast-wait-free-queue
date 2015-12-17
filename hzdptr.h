@@ -82,7 +82,8 @@ void hzdptr_retire(hzdptr_t * hzd, void * ptr)
   }
 }
 
-static void _hzdptr_enlist(hzdptr_t * hzd)
+static inline
+void _hzdptr_enlist(hzdptr_t * hzd)
 {
   static hzdptr_t * volatile _tail;
   hzdptr_t * tail = _tail;

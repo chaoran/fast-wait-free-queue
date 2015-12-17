@@ -189,8 +189,8 @@ static void * help_enq(queue_t * q, handle_t * th, cell_t * c, long i)
 {
   void * v = spin(&c->val);
 
-  if (v != TOP && v != BOT ||
-      v == BOT && !CAScs(&c->val, &v, TOP) && v != TOP) {
+  if ((v != TOP && v != BOT) ||
+      (v == BOT && !CAScs(&c->val, &v, TOP) && v != TOP)) {
     return v;
   }
 
@@ -216,15 +216,15 @@ static void * help_enq(queue_t * q, handle_t * th, cell_t * c, long i)
     } while (ph != th->Eh);
   }
 
-  if (e == BOT && CAS(&c->enq, &e, TOP) || e == TOP) {
+  if ((e == BOT && CAS(&c->enq, &e, TOP)) || e == TOP) {
     return (q->Ei <= i ? BOT : TOP);
   }
 
   long ei = ACQUIRE(&e->id);
   void * ev = ACQUIRE(&e->val);
 
-  if (ei > 0 && ei <= i && CAS(&e->id, &ei, -i) ||
-      ei == -i && c->val == TOP) {
+  if ((ei > 0 && ei <= i && CAS(&e->id, &ei, -i)) ||
+      (ei == -i && c->val == TOP)) {
     c->val = ev;
   }
 
@@ -251,7 +251,7 @@ static void help_deq(queue_t * q, handle_t * th, handle_t * ph)
       void * v = help_enq(q, th, c, i);
       deq_t * cd = c->deq;
 
-      if (v == BOT || v != TOP && cd == BOT) new = i;
+      if (v == BOT || (v != TOP && cd == BOT)) new = i;
       else idx = ACQUIRE(&deq->idx);
     }
 
@@ -266,7 +266,7 @@ static void help_deq(queue_t * q, handle_t * th, handle_t * ph)
     deq_t * cd = c->deq;
 
     if (c->val == TOP ||
-        cd == BOT && CAS(&c->deq, &cd, deq) || cd == deq) {
+        (cd == BOT && CAS(&c->deq, &cd, deq)) || cd == deq) {
       CAS(&deq->id, &id, 0);
       break;
     }
@@ -305,7 +305,6 @@ static void * deq_slow(queue_t * q, handle_t * th, long id)
   deq->idx = -id;
   RELEASE(&deq->id, id);
 
-  node_t * Dp = th->Dp;
   help_deq(q, th, th);
   long i = deq->idx;
 

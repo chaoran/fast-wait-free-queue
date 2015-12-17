@@ -24,7 +24,7 @@ void init(int nprocs, int logn) {
     nops *= 10;
   }
 
-  printf("  Number of operations: %d\n", nops);
+  printf("  Number of operations: %ld\n", nops);
 
   q = align_malloc(PAGE_SIZE, sizeof(queue_t));
   queue_init(q, nprocs);

@@ -69,8 +69,6 @@ void queue_init(queue_t * q, int nprocs)
 
 static inline void fixState(RingQueue *rq) {
 
-  uint64_t t, h, n;
-
   while (1) {
     uint64_t t = rq->tail;
     uint64_t h = rq->head;
@@ -166,7 +164,7 @@ static uint64_t lcrq_get(queue_t * q, handle_t * handle) {
 
     RingNode* cell = &rq->array[h & (RING_SIZE-1)];
 
-    uint64_t tt;
+    uint64_t tt = 0;
     int r = 0;
 
     while (1) {
@@ -180,7 +178,7 @@ static uint64_t lcrq_get(queue_t * q, handle_t * handle) {
 
       if (!is_empty(val)) {
         if (idx == h) {
-          if (CAS2(cell, &val, &cell_idx, -1, unsafe | h + RING_SIZE))
+          if (CAS2(cell, &val, &cell_idx, -1, (unsafe | h) + RING_SIZE))
             return val;
         } else {
           if (CAS2(cell, &val, &cell_idx, val, set_unsafe(idx))) {
@@ -196,7 +194,7 @@ static uint64_t lcrq_get(queue_t * q, handle_t * handle) {
         uint64_t t = tail_index(tt);
 
         if (unsafe) { // Nothing to do, move along
-          if (CAS2(cell, &val, &cell_idx, val, unsafe | h + RING_SIZE))
+          if (CAS2(cell, &val, &cell_idx, val, (unsafe | h) + RING_SIZE))
             break;
         } else if (t < h + 1 || r > 200000 || crq_closed) {
           if (CAS2(cell, &val, &idx, val, h + RING_SIZE)) {

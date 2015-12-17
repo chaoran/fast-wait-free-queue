@@ -122,7 +122,8 @@ static void * thread(void * bits)
   pthread_barrier_wait(&barrier);
 
   int i;
-  void * result;
+  void * result = NULL;
+
   for (i = 0; i < MAX_ITERS && target == 0; ++i) {
     long us = elapsed_time(0);
     result = benchmark(id, nprocs);

@@ -5,12 +5,12 @@
 
 typedef struct drand48_data delay_t;
 
-static void delay_init(delay_t * state, int id)
+static inline void delay_init(delay_t * state, int id)
 {
   srand48_r(id + 1, state);
 }
 
-static void delay_exec(delay_t * state)
+static inline void delay_exec(delay_t * state)
 {
   long n;
   lrand48_r(state, &n);

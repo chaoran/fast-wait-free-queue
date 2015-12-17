@@ -41,14 +41,4 @@ int cpumap(int id, int nprocs)
 
 #endif
 
-static void thread_pin(int id, int nprocs)
-{
-  cpu_set_t set;
-  CPU_ZERO(&set);
-
-  int cpu = cpumap(id, nprocs);
-  CPU_SET(cpu, &set);
-  sched_setaffinity(0, sizeof(set), &set);
-}
-
 #endif /* end of include guard: CPUMAP_H */
