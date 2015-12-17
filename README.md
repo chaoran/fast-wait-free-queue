@@ -53,11 +53,21 @@ runs `wfqueue` with 8 threads up to 10 times and collect statistic results.
 
 You can use the `benchmark` script, which invokes `driver` on all combinations of a list of binaries and a list of numbers of threads, and report the `mean running time` and `margin of error` for each combination. You can specify the list of binaries using the environment variable `TESTS`. You can specify the list of numbers of threads using the environment variable `PROCS`.
 
+The generated output of `benchmark` can be used as a datafile for gnuplot. The first column of `benchmark`'s output is the number threads. Then every two columns are the `mean running time` and `margin of error` for each queue implementation. They are in the same order as they are specified in `TESTS`.
+
 For example,
 ```
-TESTS=wfqueue:lcrq:faa PROCS=1:2:4 ./benchmark
+TESTS=wfqueue:lcrq:faa:delay PROCS=1:2:4:8 ./benchmark
 ```
-runs each of `wfqueue`, `lcrq`, and `faa` using 1, 2, and 4 threads.
+runs each of `wfqueue`, `lcrq`, `faa`, and `delay` using 1, 2, 4, and 8 threads.
+
+Then you can plot them using,
+```
+set logscale x 2
+plot "t" using 1:(20000/($2-$8)) t "wqueue" w lines, \
+     "t" using 1:(20000/($4-$8)) t "lcrq" w lines, \
+     "t" using 1:(20000/($6-$8)) t "faa" w lines
+```
 
 ## How to map threads to cores
 

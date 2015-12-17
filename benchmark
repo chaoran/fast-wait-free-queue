@@ -12,13 +12,15 @@ else
   IFS=':' read -r -a PROCS <<< "${PROCS}"
 fi
 
-printf 'Host: %s\n' $( hostname )
-printf 'Benchmarks: %s\n' $( IFS=$','; echo "${TESTS[*]}" )
-printf 'Threads: %s\n' $( IFS=$','; echo "${PROCS[*]}" )
+printf '#! Host: %s\n' $( hostname )
+printf '#! Benchmarks: %s\n' "${TESTS[*]}"
+printf '#! Threads: %s\n' "${PROCS[*]}"
 
-for i in ${TESTS[@]}; do
-  for j in ${PROCS[@]}; do
-    echo -e "$i $j \
-      $(./driver ./$i $j | tail -n 1 | awk '{print $3,$5}')"
+for j in ${PROCS[@]}; do
+  printf '%d' $j
+  for i in ${TESTS[@]}; do
+    echo -ne \
+      "$(./driver ./$i $j | tail -n 1 | awk '{printf " %.2f %.2f", $3, $5}')"
   done
+  printf '\n'
 done
