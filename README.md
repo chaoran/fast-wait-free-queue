@@ -42,6 +42,8 @@ For example,
 ```
 runs `wfqueue` with 8 threads.
 
+If you would like to verify the result, compile the binary with `VERIFY=1 make`. Then execute a binary directly will print either `PASSED` or error messages.
+
 You can also use the `driver` script, which invokes a binary up to 10 times and measures the **mean of running times**, the **running time of the current run**, the **standard deviation**, **margin of error** (both in time and percentage) of each run.
 The script terminates when the **margin of error** is relatively small (**< 0.02**), or has invoked the binary 10 times.
 
