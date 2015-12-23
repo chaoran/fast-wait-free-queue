@@ -10,15 +10,11 @@
 #define MAX_GARBAGE(n) (2 * n)
 
 #ifndef MAX_SPIN
-#define MAX_SPIN 1000
+#define MAX_SPIN 100
 #endif
 
 #ifndef MAX_PATIENCE
 #define MAX_PATIENCE 100
-#endif
-
-#ifndef MAX_DELAY
-#define MAX_DELAY 100
 #endif
 
 typedef struct _enq_t enq_t;
@@ -139,9 +135,9 @@ static int enq_fast(queue_t * q, handle_t * th, void * v, long * id)
 {
   long i = FAAcs(&q->Ei, 1);
   cell_t * c = find_cell(&th->Ep, i, th);
-  void * cv = c->val;
+  void * cv = BOT;
 
-  if (cv == BOT && CAS(&c->val, &cv, v)) {
+  if (CAS(&c->val, &cv, v)) {
     return 1;
   } else {
     *id = i;
@@ -160,15 +156,14 @@ static void enq_slow(queue_t * q, handle_t * th, void * v, long id)
   do {
     long i = FAA(&q->Ei, 1);
     cell_t * c = find_cell(&tail, i, th);
-    enq_t * ce = c->enq;
+    enq_t * ce = BOT;
 
-    if (ce == BOT && CAScs(&c->enq, &ce, enq) && c->val != TOP) {
+    if (CAScs(&c->enq, &ce, enq) && c->val != TOP) {
       if (!CAS(&enq->id, &id, -i)) {
         c = find_cell(&th->Ep, -id, th);
       }
 
       c->val = v;
-      break;
     }
   } while (enq->id > 0);
 }
@@ -188,17 +183,14 @@ void enqueue(queue_t * q, handle_t * th, void * v)
 static void * help_enq(queue_t * q, handle_t * th, cell_t * c, long i)
 {
   void * v = spin(&c->val);
-
   if ((v != TOP && v != BOT) ||
       (v == BOT && !CAScs(&c->val, &v, TOP) && v != TOP)) {
     return v;
   }
 
   enq_t * e = c->enq;
-
   if (e == BOT) {
     handle_t * ph = th->Eh;
-
     do {
       enq_t * pe = &ph->Er;
       long id = pe->id;
@@ -216,7 +208,10 @@ static void * help_enq(queue_t * q, handle_t * th, cell_t * c, long i)
     } while (ph != th->Eh);
   }
 
-  if ((e == BOT && CAS(&c->enq, &e, TOP)) || e == TOP) {
+  if (e == BOT) {
+    if (CAS(&c->enq, &e, TOP)) e = TOP;
+  }
+  if (e == TOP) {
     return (q->Ei <= i ? BOT : TOP);
   }
 
@@ -231,49 +226,49 @@ static void * help_enq(queue_t * q, handle_t * th, cell_t * c, long i)
   return c->val;
 }
 
-static void help_deq(queue_t * q, handle_t * th, handle_t * ph)
+static long help_deq(queue_t * q, handle_t * th, handle_t * ph)
 {
   deq_t * deq = &ph->Dr;
   long id = ACQUIRE(&deq->id);
-  if (id == 0) return;
-
   long idx = deq->idx;
-  long i = id + 1, old = -id, new = 0;
+  long old = id;
 
   node_t * Dp = ph->Dp;
   th->Hp = Dp;
   FENCE();
 
-  while (deq->id == id) {
-    node_t * h = Dp;
-    for (; new == 0 && idx == old; ++i) {
+  long i;
+  node_t * h = Dp;
+  for (i = id + 1; deq->id == id; ++i) {
+    if (idx == old) {
       cell_t * c = find_cell(&h, i, th);
       void * v = help_enq(q, th, c, i);
-      deq_t * cd = c->deq;
 
-      if (v == BOT || (v != TOP && cd == BOT)) new = i;
-      else idx = ACQUIRE(&deq->idx);
+      if (v == BOT || (v != TOP && c->deq == BOT)) {
+        if (CASra(&deq->idx, &idx, i)) idx = i;
+      } else {
+        idx = ACQUIRE(&deq->idx);
+      }
     }
 
-    if (idx == old) {
-      if (CASra(&deq->idx, &idx, new)) idx = new;
-      if (idx >= new) new = 0;
+    if (idx != old) {
+      if (deq->id != id) break;
+
+      cell_t * c = find_cell(&Dp, idx, th);
+      deq_t * cd = BOT;
+
+      if (c->val == TOP || CAS(&c->deq, &cd, deq) || cd == deq) {
+        CAS(&deq->id, &id, 0);
+        break;
+      }
+
+      h = Dp;
+      old = idx;
+      if (old > i) i = old;
     }
-
-    if (idx < 0) break;
-
-    cell_t * c = find_cell(&Dp, idx, th);
-    deq_t * cd = c->deq;
-
-    if (c->val == TOP ||
-        (cd == BOT && CAS(&c->deq, &cd, deq)) || cd == deq) {
-      CAS(&deq->id, &id, 0);
-      break;
-    }
-
-    old = idx;
-    if (idx >= i) i = idx + 1;
   }
+
+  return idx;
 }
 
 static void * deq_fast(queue_t * q, handle_t * th, long * id)
@@ -282,37 +277,30 @@ static void * deq_fast(queue_t * q, handle_t * th, long * id)
   cell_t * c = find_cell(&th->Dp, i, th);
   void * v = help_enq(q, th, c, i);
 
+  deq_t * cd = BOT;
   if (v == BOT) return BOT;
-  if (v != TOP) {
-    deq_t * cd = c->deq;
-    if (cd == BOT && CAS(&c->deq, &cd, TOP)) {
-      if (++th->delay > MAX_DELAY) {
-        help_deq(q, th, th->Dh);
-        th->Dh = th->Dh->next;
-        th->delay = 0;
-      }
-      return v;
-    }
-  }
+  if (v == TOP || !CAS(&c->deq, &cd, TOP)) { *id = i; return TOP; }
 
-  *id = i;
-  return TOP;
+  handle_t * peer = th->Dh;
+  if (peer->Dr.id > 0) {
+    help_deq(q, th, peer);
+    th->Dh = peer->next;
+  }
+  return v;
 }
 
 static void * deq_slow(queue_t * q, handle_t * th, long id)
 {
   deq_t * deq = &th->Dr;
-  deq->idx = -id;
+  deq->idx = id;
   RELEASE(&deq->id, id);
 
-  help_deq(q, th, th);
-  long i = deq->idx;
+  long i = help_deq(q, th, th);
+  cell_t * c = find_cell(&th->Dp, i, th);
+  void * val = c->val;
 
   long Di = q->Di;
   while (Di <= i && !CAS(&q->Di, &Di, i + 1));
-
-  cell_t * c = find_cell(&th->Dp, i, th);
-  void * val = c->val;
   return val == TOP ? BOT : val;
 }
 
