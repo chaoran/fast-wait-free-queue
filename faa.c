@@ -4,7 +4,7 @@
 void queue_init(queue_t * q, int nprocs) {}
 void queue_register(queue_t * q, handle_t * hd, int id)
 {
-  *hd = id;
+  *hd = id + 1;
 }
 
 void enqueue(queue_t * q, handle_t * th, void * val)

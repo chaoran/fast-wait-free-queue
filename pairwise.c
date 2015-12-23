@@ -24,7 +24,7 @@ void init(int nprocs, int logn) {
     nops *= 10;
   }
 
-  printf("  Number of operations: %d\n", nops);
+  printf("  Number of operations: %ld\n", nops);
 
   q = align_malloc(PAGE_SIZE, sizeof(queue_t));
   queue_init(q, nprocs);
@@ -49,11 +49,42 @@ void * benchmark(int id, int nprocs) {
     enqueue(q, th, val);
     delay_exec(&state);
 
+#ifndef VERIFY
     dequeue(q, th);
+#else
+    do val = dequeue(q, th);
+    while (val == EMPTY);
+#endif
     delay_exec(&state);
   }
 
   return val;
 }
 
-int verify() { return 1; }
+#ifdef VERIFY
+static int compare(const void * a, const void * b) {
+  return *(int *) a - *(int *) b;
+}
+#endif
+
+int verify(int nprocs, void ** results) {
+#ifndef VERIFY
+  return 0;
+#else
+  qsort(results, nprocs, sizeof(void *), compare);
+
+  int i;
+  int ret = 0;
+
+  for (i = 0; i < nprocs; ++i) {
+    int res = (int) (intptr_t) results[i];
+    if (res != i + 1) {
+      fprintf(stderr, "expected %d but received %d\n", i + 1, res);
+      ret = 1;
+    }
+  }
+
+  if (ret != 1) fprintf(stdout, "PASSED\n");
+  return ret;
+#endif
+}

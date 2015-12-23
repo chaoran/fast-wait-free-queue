@@ -1,8 +1,17 @@
 TESTS = wfqueue wfqueue0 lcrq ccqueue msqueue faa delay
 
 CC = gcc
-CFLAGS = -g -O3 -pthread -D_GNU_SOURCE
+CFLAGS = -g -Wall -O3 -pthread -D_GNU_SOURCE
 LDLIBS = -lpthread -lm
+
+ifeq (${VERIFY}, 1)
+	CFLAGS += -DVERIFY
+endif
+
+ifdef JEMALLOC_PATH
+	LDFLAGS += -L${JEMALLOC_PATH}/lib -Wl,-rpath,${JEMALLOC_PATH}/lib
+	LDLIBS += -ljemalloc
+endif
 
 all: $(TESTS)
 
