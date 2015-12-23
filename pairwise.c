@@ -63,7 +63,7 @@ void * benchmark(int id, int nprocs) {
 
 #ifdef VERIFY
 static int compare(const void * a, const void * b) {
-  return *(int *) a - *(int *) b;
+  return *(long *) a - *(long *) b;
 }
 #endif
 
