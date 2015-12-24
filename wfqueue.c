@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 #include "wfqueue.h"
@@ -164,6 +165,7 @@ static void enq_slow(queue_t * q, handle_t * th, void * v, long id)
       }
 
       c->val = v;
+      FENCE();
     }
   } while (enq->id > 0);
 }
@@ -186,6 +188,7 @@ static void * help_enq(queue_t * q, handle_t * th, cell_t * c, long i)
 
   if ((v != TOP && v != BOT) ||
       (v == BOT && !CAScs(&c->val, &v, TOP) && v != TOP)) {
+    assert(c->val != BOT);
     return v;
   }
 
@@ -212,6 +215,7 @@ static void * help_enq(queue_t * q, handle_t * th, cell_t * c, long i)
   }
 
   if ((e == BOT && CAS(&c->enq, &e, TOP)) || e == TOP) {
+    assert(c->val != BOT);
     return (q->Ei <= i ? BOT : TOP);
   }
 
@@ -220,53 +224,64 @@ static void * help_enq(queue_t * q, handle_t * th, cell_t * c, long i)
 
   if ((ei > 0 && ei <= i && CAS(&e->id, &ei, -i)) ||
       (ei == -i && c->val == TOP)) {
+    assert(ev != BOT);
     c->val = ev;
   }
 
+  FENCE();
+  assert(c->val != BOT);
   return c->val;
 }
 
 static void help_deq(queue_t * q, handle_t * th, handle_t * ph)
 {
   deq_t * deq = &ph->Dr;
+  long idx = ACQUIRE(&deq->idx);
   long id = ACQUIRE(&deq->id);
-  if (id == 0) return;
 
-  long idx = deq->idx;
-  long i = id + 1, old = -id, new = 0;
+  if (idx < id) return;
 
   node_t * Dp = ph->Dp;
   th->Hp = Dp;
   FENCE();
 
-  while (deq->id == id) {
+  long i = id + 1, old = id, new = 0;
+  while (1) {
     node_t * h = Dp;
     for (; new == 0 && idx == old; ++i) {
       cell_t * c = find_cell(&h, i, th);
       void * v = help_enq(q, th, c, i);
-      deq_t * cd = c->deq;
-
-      if (v == BOT || (v != TOP && cd == BOT)) new = i;
+      assert(c->val != BOT);
+      if (v == BOT || (v != TOP && c->deq == BOT)) new = i;
       else idx = ACQUIRE(&deq->idx);
     }
 
-    if (idx == old) {
-      if (CASra(&deq->idx, &idx, new)) idx = new;
+    if (new != 0) {
+      if (CAScs(&deq->idx, &idx, new)) idx = new;
       if (idx >= new) new = 0;
     }
 
-    if (idx < 0 || ACQUIRE(&deq->id) != id) break;
+    if (idx > id && deq->id == id) {
+      cell_t * c = find_cell(&Dp, idx, th);
+      FENCE();
+      assert(c->enq != BOT || c->val != TOP);
+      /*if (c->val == BOT) {*/
+        /*printf("idx=%ld deq->idx=%ld deq->id=%ld\n", idx, deq->idx, deq->id);*/
+        /*assert(c->val != BOT);*/
+      /*}*/
+      deq_t * cd = BOT;
 
-    cell_t * c = find_cell(&Dp, idx, th);
-    deq_t * cd = BOT;
-
-    if (c->val == TOP || CAS(&c->deq, &cd, deq) || cd == deq) {
-      CAS(&deq->id, &id, 0);
+      if (c->val == TOP || CAScs(&c->deq, &cd, deq) || cd == deq) {
+        CAScs(&deq->idx, &idx, -idx);
+        break;
+      } else {
+        old = idx;
+        if (idx >= i) i = idx + 1;
+      }
+    } else {
+      if (deq->id != id) assert(deq != &th->Dr);
       break;
     }
-
-    old = idx;
-    if (idx >= i) i = idx + 1;
   }
 }
 
@@ -275,6 +290,7 @@ static void * deq_fast(queue_t * q, handle_t * th, long * id)
   long i = FAAcs(&q->Di, 1);
   cell_t * c = find_cell(&th->Dp, i, th);
   void * v = help_enq(q, th, c, i);
+  assert(c->val != BOT);
   deq_t * cd = BOT;
 
   if (v == BOT) return BOT;
@@ -288,13 +304,15 @@ static void * deq_fast(queue_t * q, handle_t * th, long * id)
 static void * deq_slow(queue_t * q, handle_t * th, long id)
 {
   deq_t * deq = &th->Dr;
-  deq->idx = -id;
   RELEASE(&deq->id, id);
+  RELEASE(&deq->idx, id);
 
   help_deq(q, th, th);
-  long i = deq->idx;
+  long i = -deq->idx;
+  assert(i > 0 && i > id);
   cell_t * c = find_cell(&th->Dp, i, th);
   void * val = c->val;
+  assert(c->val != BOT);
 
   long Di = q->Di;
   while (Di <= i && !CAS(&q->Di, &Di, i + 1));
@@ -344,7 +362,7 @@ void queue_register(queue_t * q, handle_t * th, int id)
   th->Er.id = 0;
   th->Er.val = BOT;
   th->Dr.id = 0;
-  th->Dr.idx = 0;
+  th->Dr.idx = -1;
 
   th->spare = new_node();
 
