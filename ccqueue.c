@@ -55,6 +55,8 @@ void queue_register(queue_t * queue, handle_t * handle, int id)
 void enqueue(queue_t * queue, handle_t * handle, void * data)
 {
   node_t * node = handle->next;
+  if (node == NULL) node = align_malloc(CACHE_LINE_SIZE, sizeof(node_t));
+  else handle->next = NULL;
   node->data = data;
   node->next = NULL;
 
@@ -66,8 +68,11 @@ void * dequeue(queue_t * queue, handle_t * handle)
   node_t * node;
   ccsynch_apply(&queue->deq, &handle->deq, &serialDequeue, &queue->head, &node);
 
-  handle->next = node;
-  return node ? node->data : (void *) -1;
+  void * data = node ? node->data : (void *) -1;
+  if (handle->next == NULL) handle->next = node;
+  else free(node);
+
+  return data;
 }
 
 void queue_free(int id, int nprocs) {}
