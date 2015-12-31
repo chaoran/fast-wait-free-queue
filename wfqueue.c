@@ -15,7 +15,7 @@
 #endif
 
 #ifndef MAX_PATIENCE
-#define MAX_PATIENCE 3
+#define MAX_PATIENCE 10
 #endif
 
 typedef struct _enq_t enq_t;
