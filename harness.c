@@ -132,6 +132,7 @@ static void * thread(void * bits)
     report(id, nprocs, i, us);
   }
 
+  thread_exit(id, nprocs);
   return result;
 }
 

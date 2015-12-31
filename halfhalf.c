@@ -13,7 +13,6 @@ static queue_t * q;
 static handle_t ** hds;
 
 void init(int nprocs, int logn) {
-
   /** Use 10^7 as default input size. */
   if (logn == 0) logn = LOGN_OPS;
 
@@ -37,6 +36,10 @@ void thread_init(int id, int nprocs) {
   queue_register(q, hds[id], id);
 }
 
+void thread_exit(int id, int nprocs) {
+  queue_free(q, hds[id]);
+}
+
 void * benchmark(int id, int nprocs) {
   void * val = (void *) (intptr_t) (id + 1);
   handle_t * th = hds[id];
@@ -44,51 +47,25 @@ void * benchmark(int id, int nprocs) {
   delay_t state;
   delay_init(&state, id);
 
+  struct drand48_data rstate;
+  srand48_r(id, &rstate);
+
   int i;
   for (i = 0; i < nops / nprocs; ++i) {
-    enqueue(q, th, val);
-    delay_exec(&state);
+    long n;
+    lrand48_r(&rstate, &n);
 
-#ifndef VERIFY
-    dequeue(q, th);
-#else
-    do val = dequeue(q, th);
-    while (val == EMPTY);
-#endif
+    if (n % 2 == 0)
+      enqueue(q, th, val);
+    else
+      dequeue(q, th);
+
     delay_exec(&state);
   }
 
   return val;
 }
 
-void thread_exit(int id, int nprocs) {
-  queue_free(q, hds[id]);
-}
-
-#ifdef VERIFY
-static int compare(const void * a, const void * b) {
-  return *(long *) a - *(long *) b;
-}
-#endif
-
 int verify(int nprocs, void ** results) {
-#ifndef VERIFY
   return 0;
-#else
-  qsort(results, nprocs, sizeof(void *), compare);
-
-  int i;
-  int ret = 0;
-
-  for (i = 0; i < nprocs; ++i) {
-    int res = (int) (intptr_t) results[i];
-    if (res != i + 1) {
-      fprintf(stderr, "expected %d but received %d\n", i + 1, res);
-      ret = 1;
-    }
-  }
-
-  if (ret != 1) fprintf(stdout, "PASSED\n");
-  return ret;
-#endif
 }

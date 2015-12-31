@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
+#include <pthread.h>
 #include "wfqueue.h"
 #include "primitives.h"
 
@@ -138,6 +139,7 @@ static int enq_fast(queue_t * q, handle_t * th, void * v, long * id)
   void * cv = BOT;
 
   if (CAS(&c->val, &cv, v)) {
+    th->fastenq++;
     return 1;
   } else {
     *id = i;
@@ -166,6 +168,8 @@ static void enq_slow(queue_t * q, handle_t * th, void * v, long id)
       c->val = v;
     }
   } while (enq->id > 0);
+
+  th->slowenq++;
 }
 
 void enqueue(queue_t * q, handle_t * th, void * v)
@@ -217,11 +221,11 @@ static void * help_enq(queue_t * q, handle_t * th, cell_t * c, long i)
   if (ei > i) {
     if (c->val == TOP && q->Ei <= i) return BOT;
   } else {
-    if (ei > 0 && CAS(&e->id, &ei, -i)) {
-      c->val = ev;
+    if ((ei > 0 && CAS(&e->id, &ei, -i)) ||
+        (ei == -i && c->val == TOP)) {
       long Ei = q->Ei;
       while (Ei <= i && !CAS(&q->Ei, &Ei, i + 1));
-    } else if (ei == -i && c->val == TOP) {
+
       c->val = ev;
     }
   }
@@ -283,6 +287,7 @@ static void * deq_fast(queue_t * q, handle_t * th, long * id)
 
   help_deq(q, th, th->Dh);
   th->Dh = th->Dh->next;
+  th->fastdeq++;
   return v;
 }
 
@@ -299,6 +304,7 @@ static void * deq_slow(queue_t * q, handle_t * th, long id)
 
   long Di = q->Di;
   while (Di <= i && !CAS(&q->Di, &Di, i + 1));
+  th->slowdeq++;
   return val == TOP ? BOT : val;
 }
 
@@ -324,6 +330,8 @@ void * dequeue(queue_t * q, handle_t * th)
   return v;
 }
 
+static pthread_barrier_t barrier;
+
 void queue_init(queue_t * q, int nprocs)
 {
   q->Hi = 0;
@@ -333,6 +341,24 @@ void queue_init(queue_t * q, int nprocs)
   q->Di = 1;
 
   q->nprocs = nprocs;
+  pthread_barrier_init(&barrier, NULL, nprocs);
+}
+
+void queue_free(queue_t * q, handle_t * h)
+{
+  static int lock = 0;
+
+  FAA(&q->fastenq, h->fastenq);
+  FAA(&q->slowenq, h->slowenq);
+  FAA(&q->fastdeq, h->fastdeq);
+  FAA(&q->slowdeq, h->slowdeq);
+
+  pthread_barrier_wait(&barrier);
+
+  if (FAA(&lock, 1) == 0)
+    printf("Enq: %.1f Deq: %.1f\n",
+        q->slowenq * 100.0 / (q->fastenq + q->slowenq),
+        q->slowdeq * 100.0 / (q->fastdeq + q->slowdeq));
 }
 
 void queue_register(queue_t * q, handle_t * th, int id)
@@ -349,6 +375,10 @@ void queue_register(queue_t * q, handle_t * th, int id)
 
   th->Ei = 0;
   th->spare = new_node();
+  th->slowenq = 0;
+  th->slowdeq = 0;
+  th->fastenq = 0;
+  th->fastdeq = 0;
 
   static handle_t * volatile _tail;
   handle_t * tail = _tail;
