@@ -96,6 +96,8 @@ typedef struct _handle_t {
    */
   struct _handle_t * Eh CACHE_ALIGNED;
 
+  long Ei;
+
   /**
    * Handle of the next dequeuer to help.
    */

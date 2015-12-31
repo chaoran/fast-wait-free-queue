@@ -192,35 +192,38 @@ static void * help_enq(queue_t * q, handle_t * th, cell_t * c, long i)
   enq_t * e = c->enq;
 
   if (e == BOT) {
-    handle_t * ph = th->Eh;
+    handle_t * ph; enq_t * pe; long id;
+    ph = th->Eh, pe = &ph->Er, id = pe->id;
 
-    do {
-      enq_t * pe = &ph->Er;
-      long id = pe->id;
+    if (th->Ei != 0 && th->Ei != id) {
+      th->Ei = 0;
+      th->Eh = ph->next;
+      ph = th->Eh, pe = &ph->Er, id = pe->id;
+    }
 
-      if (id > 0 && id <= i) {
-        long Ei = q->Ei;
-        while (Ei <= i && !CAS(&q->Ei, &Ei, i + 1));
+    if (id > 0 && id <= i && !CAS(&c->enq, &e, pe))
+      th->Ei = id;
+    else
+      th->Eh = ph->next;
 
-        if (CAS(&c->enq, &e, pe)) e = pe;
-        th->Eh = (e == pe ? ph->next : ph);
-        break;
-      }
-
-      ph = ph->next;
-    } while (ph != th->Eh);
+    if (e == BOT && CAS(&c->enq, &e, TOP)) e = TOP;
   }
 
-  if ((e == BOT && CAS(&c->enq, &e, TOP)) || e == TOP) {
-    return (q->Ei <= i ? BOT : TOP);
-  }
+  if (e == TOP) return (q->Ei <= i ? BOT : TOP);
 
   long ei = ACQUIRE(&e->id);
   void * ev = ACQUIRE(&e->val);
 
-  if ((ei > 0 && ei <= i && CAS(&e->id, &ei, -i)) ||
-      (ei == -i && c->val == TOP)) {
-    c->val = ev;
+  if (ei > i) {
+    if (c->val == TOP && q->Ei <= i) return BOT;
+  } else {
+    if (ei > 0 && CAS(&e->id, &ei, -i)) {
+      c->val = ev;
+      long Ei = q->Ei;
+      while (Ei <= i && !CAS(&q->Ei, &Ei, i + 1));
+    } else if (ei == -i && c->val == TOP) {
+      c->val = ev;
+    }
   }
 
   return c->val;
@@ -344,6 +347,7 @@ void queue_register(queue_t * q, handle_t * th, int id)
   th->Dr.id = 0;
   th->Dr.idx = -1;
 
+  th->Ei = 0;
   th->spare = new_node();
 
   static handle_t * volatile _tail;
