@@ -81,3 +81,4 @@ void * dequeue(queue_t * q, handle_t * handle)
   return data;
 }
 
+void queue_free(int id, int nprocs) {}

@@ -70,3 +70,4 @@ void * dequeue(queue_t * queue, handle_t * handle)
   return node ? node->data : (void *) -1;
 }
 
+void queue_free(int id, int nprocs) {}

@@ -240,3 +240,5 @@ void * dequeue(queue_t * q, handle_t * th)
   return (void *) lcrq_get(q, th);
 }
 
+void queue_free(int id, int nprocs) {}
+

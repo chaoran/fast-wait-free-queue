@@ -36,4 +36,5 @@ void * benchmark(int id, int nprocs) {
   return NULL;
 }
 
+void thread_exit(int id, int nprocs) {}
 int verify() { return 1; }

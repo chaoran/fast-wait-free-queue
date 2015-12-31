@@ -18,3 +18,5 @@ void * dequeue(queue_t * q, handle_t * th)
   return (void *) (long) *th;
 }
 
+void queue_free(queue_t * q, handle_t * h) {}
+
