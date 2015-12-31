@@ -1,4 +1,4 @@
-TESTS = wfqueue wfqueue0 lcrq ccqueue msqueue faa delay
+TESTS = wfqueue wfqueue0#lcrq ccqueue msqueue faa delay
 
 CC = gcc
 CFLAGS = -g -Wall -O3 -pthread -D_GNU_SOURCE
