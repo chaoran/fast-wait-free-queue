@@ -12,14 +12,13 @@ T95=( \
   2.080 2.074 2.069 2.064 2.060 2.056 2.052 2.048 2.045 2.042 \
   )
 
-cmd="$@"
-TIMES[0]=$(eval $cmd | grep Mean | awk '{ print $5 }')
+TIMES[0]=$($@ | grep Mean | awk '{ print $5 }')
 SUM=${TIMES[0]}
 printf '#%-2d %.2f\n' 1 ${TIMES[0]}
 
 i=1
 while true; do
-  TIME=$(eval $cmd | grep Mean | awk '{ print $5 }')
+  TIME=$($@ | grep Mean | awk '{ print $5 }')
   TIMES[$i]=$TIME
   SUM=$(echo "$SUM + $TIME" | bc)
   N=$(($i + 1))
