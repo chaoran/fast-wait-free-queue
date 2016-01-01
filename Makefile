@@ -36,7 +36,11 @@ faa: CFLAGS += -DFAAQ
 delay: CFLAGS += -DDELAY
 
 $(TESTS): harness.o
+ifeq (${HALFHALF}, 1)
 wfqueue wfqueue0 lcrq ccqueue msqueue faa delay: halfhalf.o
+else
+wfqueue wfqueue0 lcrq ccqueue msqueue faa delay: pairwise.o
+endif
 
 msqueue lcrq: hzdptr.o xxhash.o
 
