@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <assert.h>
 #include "delay.h"
 #include "ccqueue.h"
 
@@ -55,8 +56,10 @@ void queue_register(queue_t * queue, handle_t * handle, int id)
 void enqueue(queue_t * queue, handle_t * handle, void * data)
 {
   node_t * node = handle->next;
-  if (node == NULL) node = align_malloc(CACHE_LINE_SIZE, sizeof(node_t));
-  else handle->next = NULL;
+
+  if (node) handle->next = NULL;
+  else node = align_malloc(CACHE_LINE_SIZE, sizeof(node_t));
+
   node->data = data;
   node->next = NULL;
 
@@ -68,9 +71,15 @@ void * dequeue(queue_t * queue, handle_t * handle)
   node_t * node;
   ccsynch_apply(&queue->deq, &handle->deq, &serialDequeue, &queue->head, &node);
 
-  void * data = node ? node->data : (void *) -1;
-  if (handle->next == NULL) handle->next = node;
-  else free(node);
+  void * data;
+
+  if (node == (void *) -1) {
+    data = (void *) -1;
+  } else {
+    data = node->data;
+    if (handle->next) free(node);
+    else handle->next = node;
+  }
 
   return data;
 }
