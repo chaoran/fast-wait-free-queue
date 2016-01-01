@@ -1,40 +1,20 @@
-#include <stdio.h>
-#include "delay.h"
+#include "queue.h"
+#include "primitives.h"
 
-#ifndef LOGN_OPS
-#define LOGN_OPS 7
-#endif
-
-static long nops;
-
-void init(int nprocs, int logn) {
-  /** Use 10^7 as default input size. */
-  if (logn == 0) logn = LOGN_OPS;
-
-  /** Compute the number of ops to perform. */
-  nops = 1;
-  int i;
-  for (i = 0; i < logn; ++i) {
-    nops *= 10;
-  }
-
-  printf("  Number of operations: %ld\n", nops);
+void queue_init(queue_t * q, int nprocs) {}
+void queue_register(queue_t * q, handle_t * hd, int id)
+{
+  *hd = id + 1;
 }
 
-void thread_init(int id, int nprocs) {}
-
-void * benchmark(int id, int nprocs) {
-  delay_t state;
-  delay_init(&state, id);
-
-  int i;
-  for (i = 0; i < nops / nprocs; ++i) {
-    delay_exec(&state);
-    delay_exec(&state);
-  }
-
-  return NULL;
+void enqueue(queue_t * q, handle_t * th, void * val)
+{
 }
 
-void thread_exit(int id, int nprocs) {}
-int verify() { return 1; }
+void * dequeue(queue_t * q, handle_t * th)
+{
+  return (void *) (long) *th;
+}
+
+void queue_free(queue_t * q, handle_t * h) {}
+

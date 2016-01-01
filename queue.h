@@ -15,13 +15,17 @@
 
 #elif FAAQ
 #include "align.h"
-#define EMPTY ((void *) 0)
 
 typedef struct {
   volatile long P DOUBLE_CACHE_ALIGNED;
   volatile long C DOUBLE_CACHE_ALIGNED;
 } queue_t DOUBLE_CACHE_ALIGNED;
 
+typedef int handle_t;
+
+#elif DELAY
+
+typedef int queue_t;
 typedef int handle_t;
 
 #else

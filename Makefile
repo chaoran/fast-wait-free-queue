@@ -33,10 +33,10 @@ lcrq: CFLAGS += -DLCRQ
 ccqueue: CFLAGS += -DCCQUEUE
 msqueue: CFLAGS += -DMSQUEUE
 faa: CFLAGS += -DFAAQ
+delay: CFLAGS += -DDELAY
 
 $(TESTS): harness.o
-wfqueue wfqueue0 lcrq ccqueue msqueue faa: halfhalf.o
-delay: delay.o
+wfqueue wfqueue0 lcrq ccqueue msqueue faa delay: halfhalf.o
 
 msqueue lcrq: hzdptr.o xxhash.o
 
