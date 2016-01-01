@@ -139,7 +139,9 @@ static int enq_fast(queue_t * q, handle_t * th, void * v, long * id)
   void * cv = BOT;
 
   if (CAS(&c->val, &cv, v)) {
+#ifdef RECORD
     th->fastenq++;
+#endif
     return 1;
   } else {
     *id = i;
@@ -169,7 +171,9 @@ static void enq_slow(queue_t * q, handle_t * th, void * v, long id)
     }
   } while (enq->id > 0);
 
+#ifdef RECORD
   th->slowenq++;
+#endif
 }
 
 void enqueue(queue_t * q, handle_t * th, void * v)
@@ -287,7 +291,9 @@ static void * deq_fast(queue_t * q, handle_t * th, long * id)
 
   help_deq(q, th, th->Dh);
   th->Dh = th->Dh->next;
+#ifdef RECORD
   th->fastdeq++;
+#endif
   return v;
 }
 
@@ -304,7 +310,9 @@ static void * deq_slow(queue_t * q, handle_t * th, long id)
 
   long Di = q->Di;
   while (Di <= i && !CAS(&q->Di, &Di, i + 1));
+#ifdef RECORD
   th->slowdeq++;
+#endif
   return val == TOP ? BOT : val;
 }
 
@@ -346,6 +354,7 @@ void queue_init(queue_t * q, int nprocs)
 
 void queue_free(queue_t * q, handle_t * h)
 {
+#ifdef RECORD
   static int lock = 0;
 
   FAA(&q->fastenq, h->fastenq);
@@ -359,6 +368,7 @@ void queue_free(queue_t * q, handle_t * h)
     printf("Enq: %.1f Deq: %.1f\n",
         q->slowenq * 100.0 / (q->fastenq + q->slowenq),
         q->slowdeq * 100.0 / (q->fastdeq + q->slowdeq));
+#endif
 }
 
 void queue_register(queue_t * q, handle_t * th, int id)
@@ -375,10 +385,12 @@ void queue_register(queue_t * q, handle_t * th, int id)
 
   th->Ei = 0;
   th->spare = new_node();
+#ifdef RECORD
   th->slowenq = 0;
   th->slowdeq = 0;
   th->fastenq = 0;
   th->fastdeq = 0;
+#endif
 
   static handle_t * volatile _tail;
   handle_t * tail = _tail;
