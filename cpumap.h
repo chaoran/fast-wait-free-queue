@@ -9,6 +9,11 @@ int cpumap(int i, int nprocs)
   return (i / 36) * 36 + (i % 2) * 18 + (i % 36 / 2);
 }
 
+#ifdef GUADALUPE_OVERSUB
+int cpumap(int i, int nprocs) {
+  return (i % 18);
+}
+
 #elif GUADALUPE_COMPACT
 int cpumap(int i, int nprocs)
 {
