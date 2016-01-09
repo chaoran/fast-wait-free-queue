@@ -163,13 +163,17 @@ static void enq_slow(queue_t * q, handle_t * th, void * v, long id)
     enq_t * ce = BOT;
 
     if (CAScs(&c->enq, &ce, enq) && c->val != TOP) {
-      if (!CAS(&enq->id, &id, -i)) {
-        c = find_cell(&th->Ep, -id, th);
-      }
-
-      c->val = v;
+      if (CAS(&enq->id, &id, -i)) break;
     }
   } while (enq->id > 0);
+
+  id = -id;
+  c = find_cell(&th->Ep, id, th);
+  if (id > i) {
+    long Ei = q->Ei;
+    while (Ei <= id && !CAS(&q->Ei, &Ei, id + 1));
+  }
+  c->val = v;
 
 #ifdef RECORD
   th->slowenq++;
@@ -229,7 +233,6 @@ static void * help_enq(queue_t * q, handle_t * th, cell_t * c, long i)
         (ei == -i && c->val == TOP)) {
       long Ei = q->Ei;
       while (Ei <= i && !CAS(&q->Ei, &Ei, i + 1));
-
       c->val = ev;
     }
   }
