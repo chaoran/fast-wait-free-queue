@@ -156,18 +156,20 @@ static void enq_slow(queue_t * q, handle_t * th, void * v, long id)
   RELEASE(&enq->id, id);
 
   node_t * tail = th->Ep;
+  long i; cell_t * c;
 
   do {
-    long i = FAA(&q->Ei, 1);
-    cell_t * c = find_cell(&tail, i, th);
+    i = FAA(&q->Ei, 1);
+    c = find_cell(&tail, i, th);
     enq_t * ce = BOT;
 
     if (CAScs(&c->enq, &ce, enq) && c->val != TOP) {
-      if (CAS(&enq->id, &id, -i)) break;
+      if (CAS(&enq->id, &id, -i)) id = -i;
+      break;
     }
   } while (enq->id > 0);
 
-  id = -id;
+  id = -enq->id;
   c = find_cell(&th->Ep, id, th);
   if (id > i) {
     long Ei = q->Ei;
@@ -290,14 +292,10 @@ static void * deq_fast(queue_t * q, handle_t * th, long * id)
   deq_t * cd = BOT;
 
   if (v == BOT) return BOT;
-  if (v == TOP || !CAS(&c->deq, &cd, TOP)) { *id = i; return TOP; };
+  if (v != TOP && CAS(&c->deq, &cd, TOP)) return v;
 
-  help_deq(q, th, th->Dh);
-  th->Dh = th->Dh->next;
-#ifdef RECORD
-  th->fastdeq++;
-#endif
-  return v;
+  *id = i;
+  return TOP;
 }
 
 static void * deq_slow(queue_t * q, handle_t * th, long id)
@@ -329,7 +327,17 @@ void * dequeue(queue_t * q, handle_t * th)
 
   do v = deq_fast(q, th, &id);
   while (v == TOP && p-- > 0);
-  if (p < 0) v = deq_slow(q, th, id);
+  if (v == TOP) v = deq_slow(q, th, id);
+  else {
+#ifdef RECORD
+    th->fastdeq++;
+#endif
+  }
+
+  if (v != EMPTY) {
+    help_deq(q, th, th->Dh);
+    th->Dh = th->Dh->next;
+  }
 
   RELEASE(&th->Hp, NULL);
 

@@ -58,10 +58,13 @@ typedef struct DOUBLE_CACHE_ALIGNED {
    * Number of processors.
    */
   long nprocs;
+#ifdef RECORD
   long slowenq;
   long slowdeq;
   long fastenq;
   long fastdeq;
+  long empty;
+#endif
 } queue_t;
 
 typedef struct _handle_t {
@@ -116,10 +119,14 @@ typedef struct _handle_t {
    * Count the delay rounds of helping another dequeuer.
    */
   int delay;
+
+#ifdef RECORD
   long slowenq;
   long slowdeq;
   long fastenq;
   long fastdeq;
+  long empty;
+#endif
 } handle_t;
 
 #endif
