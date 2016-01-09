@@ -335,6 +335,9 @@ void * dequeue(queue_t * q, handle_t * th)
     th->spare = new_node();
   }
 
+#ifdef RECORD
+  if (v == EMPTY) th->empty++;
+#endif
   return v;
 }
 
@@ -349,6 +352,14 @@ void queue_init(queue_t * q, int nprocs)
   q->Di = 1;
 
   q->nprocs = nprocs;
+
+#ifdef RECORD
+  q->fastenq = 0;
+  q->slowenq = 0;
+  q->fastdeq = 0;
+  q->slowdeq = 0;
+  q->empty = 0;
+#endif
   pthread_barrier_init(&barrier, NULL, nprocs);
 }
 
@@ -361,13 +372,15 @@ void queue_free(queue_t * q, handle_t * h)
   FAA(&q->slowenq, h->slowenq);
   FAA(&q->fastdeq, h->fastdeq);
   FAA(&q->slowdeq, h->slowdeq);
+  FAA(&q->empty, h->empty);
 
   pthread_barrier_wait(&barrier);
 
   if (FAA(&lock, 1) == 0)
-    printf("Enq: %.1f Deq: %.1f\n",
+    printf("Enq: %f Deq: %f Empty: %f\n",
         q->slowenq * 100.0 / (q->fastenq + q->slowenq),
-        q->slowdeq * 100.0 / (q->fastdeq + q->slowdeq));
+        q->slowdeq * 100.0 / (q->fastdeq + q->slowdeq),
+        q->empty * 100.0 / (q->fastdeq + q->slowdeq));
 #endif
 }
 
@@ -390,6 +403,7 @@ void queue_register(queue_t * q, handle_t * th, int id)
   th->slowdeq = 0;
   th->fastenq = 0;
   th->fastdeq = 0;
+  th->empty = 0;
 #endif
 
   static handle_t * volatile _tail;
