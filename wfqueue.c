@@ -260,6 +260,10 @@ static void help_deq(queue_t * q, handle_t * th, handle_t * ph)
     node_t * h = Dp;
     for (; idx == old && new == 0; ++i) {
       cell_t * c = find_cell(&h, i, th);
+
+      long Di = q->Di;
+      while (Di <= i && !CAS(&q->Di, &Di, i + 1));
+
       void * v = help_enq(q, th, c, i);
       if (v == BOT || (v != TOP && c->deq == BOT)) new = i;
       else idx = ACQUIRE(&deq->idx);
@@ -309,8 +313,6 @@ static void * deq_slow(queue_t * q, handle_t * th, long id)
   cell_t * c = find_cell(&th->Dp, i, th);
   void * val = c->val;
 
-  long Di = q->Di;
-  while (Di <= i && !CAS(&q->Di, &Di, i + 1));
 #ifdef RECORD
   th->slowdeq++;
 #endif
