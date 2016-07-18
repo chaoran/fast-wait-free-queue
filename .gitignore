@@ -1,3 +1,12 @@
+# Output files
+ccqueue
+delay
+faa
+lcrq
+msqueue
+wfqueue
+wfqueue0
+
 # Object files
 *.o
 *.ko
