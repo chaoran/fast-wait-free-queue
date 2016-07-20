@@ -49,12 +49,7 @@ void * benchmark(int id, int nprocs) {
     enqueue(q, th, val);
     delay_exec(&state);
 
-#ifndef VERIFY
-    dequeue(q, th);
-#else
-    do val = dequeue(q, th);
-    while (val == EMPTY);
-#endif
+    val = dequeue(q, th);
     delay_exec(&state);
   }
 
