@@ -8,7 +8,7 @@
 #define BOT ((void *) 0)
 #define TOP ((void *)-1)
 
-#define MAX_GARBAGE(n) (2 * n)
+#define MAX_GARBAGE(n) (n)
 
 #ifndef MAX_SPIN
 #define MAX_SPIN 100
@@ -41,65 +41,163 @@ static inline node_t * new_node() {
   return n;
 }
 
-static node_t * update(node_t * volatile * pPn, node_t * cur,
-    node_t * volatile * pHp) {
-  node_t * ptr = *pPn;
+static void tryReclaimRetiredNodes(queue_t * q, handle_t * th)
+{
+  listnode_t * head = th->retiredNodesHead;
+  listnode_t * tail = th->retiredNodesTail;
 
-  if (ptr->id < cur->id) {
-    if (!CAScs(pPn, &ptr, cur)) {
-      if (ptr->id < cur->id) cur = ptr;
+  /** Return if no retired nodes to clean. */
+  if (!head) return;
+
+  /** We want to reclaim retired nodes between #old and #new. */
+
+  /** #old is the oldest node in the retired node list. */
+  node_t * old = head->data[0];
+
+  /**
+   * We cannot access #new's data, because no hazard pointer is set.
+   * Instead, we use #new_id which is saved earlier when
+   * hazard pointer is set.
+   */
+  long new_id = (long) tail->data[2];
+
+  /** Iterate every thread's handle. */
+  /** Check every thread's handle again to avoid jump backs. */
+  int i;
+  for (i = 0; i < 2; ++i) {
+    handle_t * h;
+    for (h = th->next; h != th; h = h->next) {
+      node_t * hzdptr = ACQUIRE(&h->hzdptr);
+
+      /**
+       * Check if #hzdptr is set and, if set, whether points to an
+       * retired node.
+       */
+      if (hzdptr && hzdptr->id < new_id) {
+        new_id = hzdptr->id;
+        if (new_id <= old->id) return;
+      }
     }
-
-    node_t * Hp = *pHp;
-    if (Hp && Hp->id < cur->id) cur = Hp;
   }
 
-  return cur;
+  /**
+   * Now we start reclaiming retired nodes.
+   */
+  listnode_t dummy;
+  dummy.next = head;
+
+  listnode_t * prev = &dummy;
+  listnode_t * curr = head;
+
+  /** Loop though retired nodes. */
+  while (curr) {
+    node_t * node = curr->data[0];
+    node_t * last = curr->data[1];
+
+    /** Loop though segments in the retired list. */
+    while (node != last && node->id < new_id) {
+      node_t * next = node->next;
+      free(node);
+      node = next;
+    }
+
+    /**
+     * If not all retired segments are reclaimed, update segment start
+     * point and break out from the loop.
+     */
+    if (node != last) {
+      curr->data[0] = node;
+      break;
+    }
+
+    /** Remove current node from retired list. */
+    listnode_t * next = curr->next;
+    free(curr);
+
+    /** Visit next one. */
+    prev->next = curr = next;
+  }
+
+  /** Update the head and tail pointer of retired list. */
+  th->retiredNodesHead = dummy.next;
+  if (!dummy.next) th->retiredNodesTail = NULL;
 }
 
-static void cleanup(queue_t * q, handle_t * th) {
-  long oid = q->Hi;
+static void tryRetireNodes(queue_t * q, handle_t * th, long new_id) {
+  long old_id = ACQUIRE(&q->Ri);
   node_t * new = th->Dp;
+  node_t * old;
 
-  if (oid == -1) return;
-  if (new->id - oid < MAX_GARBAGE(q->nprocs)) return;
-  if (!CASa(&q->Hi, &oid, -1)) return;
+  /** Return if garbage amount has not exceed MAX_GARBAGE. */
+  if (new_id - old_id < MAX_GARBAGE(q->nprocs)) return;
 
-  node_t * old = q->Hp;
-  handle_t * ph = th;
-  handle_t * phs[q->nprocs];
-  int i = 0;
+  /** Set hzdptr to Rp. */
+  while (1) {
+    th->hzdptr = old = q->Rp;
+    FENCE();
 
-  do {
-    node_t * Hp = ACQUIRE(&ph->Hp);
-    if (Hp && Hp->id < new->id) new = Hp;
+    if (old->id == old_id) break;
 
-    new = update(&ph->Ep, new, &ph->Hp);
-    new = update(&ph->Dp, new, &ph->Hp);
+    /** Ensure Rp and Ri is consistant. */
+    if (CASa(&q->Ri, &old_id, old->id)) {
+      old_id = old->id;
+    }
 
-    phs[i++] = ph;
-    ph = ph->next;
-  } while (new->id > oid && ph != th);
-
-  while (new->id > oid && --i >= 0) {
-    node_t * Hp = ACQUIRE(&phs[i]->Hp);
-    if (Hp && Hp->id < new->id) new = Hp;
-  }
-
-  long nid = new->id;
-
-  if (nid <= oid) {
-    RELEASE(&q->Hi, oid);
-  } else {
-    q->Hp = new;
-    RELEASE(&q->Hi, nid);
-
-    while (old != new) {
-      node_t * tmp = old->next;
-      free(old);
-      old = tmp;
+    /**
+     * #old_id is updated.
+     * Check whether threshold is satisfied again.
+     */
+    if (new_id - old_id < MAX_GARBAGE(q->nprocs)) {
+      RELEASE(&th->hzdptr, NULL);
+      tryReclaimRetiredNodes(q, th);
+      return;
     }
   }
+
+  /** Update everyone's Ep and Dp. */
+  handle_t * h;
+  for (h = th->next; h != th; h = h->next) {
+    node_t * ep = h->Ep;
+    while (ep->id < new_id && !CAScs(&h->Ep, &ep, new));
+
+    node_t * dp = h->Dp;
+    while (dp->id < new_id && !CAScs(&h->Dp, &dp, new));
+  }
+
+  RELEASE(&th->hzdptr, NULL);
+
+  /**
+   * Change Rp from old to new;
+   * if failed, release hzdptr and return.
+   */
+  if (!CASra(&q->Rp, &old, new)) {
+    tryReclaimRetiredNodes(q, th);
+    return;
+  }
+
+  /**
+   * Update Ri from #old_id to #new_id;
+   */
+  CAS(&q->Ri, &old_id, new_id);
+
+  /** Add the region to my list of retiredNodes. */
+  listnode_t * retiredNode = malloc(sizeof(listnode_t)
+      + sizeof(void * [3]));
+
+  retiredNode->next = NULL;
+  retiredNode->data[0] = old;
+  retiredNode->data[1] = new;
+  retiredNode->data[2] = (void *) new_id;
+
+  if (!th->retiredNodesTail) {
+    th->retiredNodesTail = retiredNode;
+    th->retiredNodesHead = retiredNode;
+  } else {
+    th->retiredNodesTail->next = retiredNode;
+    th->retiredNodesTail = retiredNode;
+  }
+
+  tryReclaimRetiredNodes(q, th);
 }
 
 static cell_t * find_cell(node_t * volatile * ptr, long i, handle_t * th) {
@@ -132,10 +230,11 @@ static cell_t * find_cell(node_t * volatile * ptr, long i, handle_t * th) {
   return &curr->cells[i % N];
 }
 
-static int enq_fast(queue_t * q, handle_t * th, void * v, long * id)
+static int enq_fast(queue_t * q, handle_t * th, void * v, long * id,
+    node_t ** ep)
 {
   long i = FAAcs(&q->Ei, 1);
-  cell_t * c = find_cell(&th->Ep, i, th);
+  cell_t * c = find_cell(ep, i, th);
   void * cv = BOT;
 
   if (CAS(&c->val, &cv, v)) {
@@ -149,13 +248,14 @@ static int enq_fast(queue_t * q, handle_t * th, void * v, long * id)
   }
 }
 
-static void enq_slow(queue_t * q, handle_t * th, void * v, long id)
+static void enq_slow(queue_t * q, handle_t * th, void * v, long id,
+    node_t ** ep)
 {
   enq_t * enq = &th->Er;
   enq->val = v;
   RELEASE(&enq->id, id);
 
-  node_t * tail = th->Ep;
+  node_t * tail = *ep;
   long i; cell_t * c;
 
   do {
@@ -170,7 +270,7 @@ static void enq_slow(queue_t * q, handle_t * th, void * v, long id)
   } while (enq->id > 0);
 
   id = -enq->id;
-  c = find_cell(&th->Ep, id, th);
+  c = find_cell(ep, id, th);
   if (id > i) {
     long Ei = q->Ei;
     while (Ei <= id && !CAS(&q->Ei, &Ei, id + 1));
@@ -184,14 +284,19 @@ static void enq_slow(queue_t * q, handle_t * th, void * v, long id)
 
 void enqueue(queue_t * q, handle_t * th, void * v)
 {
-  th->Hp = th->Ep;
+  th->hzdptr = th->Ep;
+  FENCE();
+  node_t * ep = th->Ep;
 
   long id;
   int p = MAX_PATIENCE;
-  while (!enq_fast(q, th, v, &id) && p-- > 0);
-  if (p < 0) enq_slow(q, th, v, id);
+  while (!enq_fast(q, th, v, &id, &ep) && p-- > 0);
+  if (p < 0) enq_slow(q, th, v, id, &ep);
 
-  RELEASE(&th->Hp, NULL);
+  node_t * cur = th->Ep;
+  while (cur->id < ep->id && !CAS(&th->Ep, &cur, ep));
+
+  RELEASE(&th->hzdptr, NULL);
 }
 
 static void * help_enq(queue_t * q, handle_t * th, cell_t * c, long i)
@@ -250,14 +355,14 @@ static void help_deq(queue_t * q, handle_t * th, handle_t * ph)
 
   if (idx < id) return;
 
-  node_t * Dp = ph->Dp;
-  th->Hp = Dp;
+  node_t * dp = ph->hzdptr;
+  th->hzdptr = dp;
   FENCE();
   idx = deq->idx;
 
   long i = id + 1, old = id, new = 0;
   while (1) {
-    node_t * h = Dp;
+    node_t * h = dp;
     for (; idx == old && new == 0; ++i) {
       cell_t * c = find_cell(&h, i, th);
 
@@ -276,7 +381,7 @@ static void help_deq(queue_t * q, handle_t * th, handle_t * ph)
 
     if (idx < 0 || deq->id != id) break;
 
-    cell_t * c = find_cell(&Dp, idx, th);
+    cell_t * c = find_cell(&dp, idx, th);
     deq_t * cd = BOT;
     if (c->val == TOP || CAS(&c->deq, &cd, deq) || cd == deq) {
       CAS(&deq->idx, &idx, -idx);
@@ -288,10 +393,11 @@ static void help_deq(queue_t * q, handle_t * th, handle_t * ph)
   }
 }
 
-static void * deq_fast(queue_t * q, handle_t * th, long * id)
+static void * deq_fast(queue_t * q, handle_t * th, long * id,
+    node_t ** dp)
 {
   long i = FAAcs(&q->Di, 1);
-  cell_t * c = find_cell(&th->Dp, i, th);
+  cell_t * c = find_cell(dp, i, th);
   void * v = help_enq(q, th, c, i);
   deq_t * cd = BOT;
 
@@ -302,7 +408,8 @@ static void * deq_fast(queue_t * q, handle_t * th, long * id)
   return TOP;
 }
 
-static void * deq_slow(queue_t * q, handle_t * th, long id)
+static void * deq_slow(queue_t * q, handle_t * th, long id,
+    node_t ** dp)
 {
   deq_t * deq = &th->Dr;
   RELEASE(&deq->id, id);
@@ -310,7 +417,7 @@ static void * deq_slow(queue_t * q, handle_t * th, long id)
 
   help_deq(q, th, th);
   long i = -deq->idx;
-  cell_t * c = find_cell(&th->Dp, i, th);
+  cell_t * c = find_cell(dp, i, th);
   void * val = c->val;
 
 #ifdef RECORD
@@ -321,15 +428,17 @@ static void * deq_slow(queue_t * q, handle_t * th, long id)
 
 void * dequeue(queue_t * q, handle_t * th)
 {
-  th->Hp = th->Dp;
+  th->hzdptr = th->Dp;
+  FENCE();
+  node_t * dp = th->Dp;
 
   void * v;
   long id;
   int p = MAX_PATIENCE;
 
-  do v = deq_fast(q, th, &id);
+  do v = deq_fast(q, th, &id, &dp);
   while (v == TOP && p-- > 0);
-  if (v == TOP) v = deq_slow(q, th, id);
+  if (v == TOP) v = deq_slow(q, th, id, &dp);
   else {
 #ifdef RECORD
     th->fastdeq++;
@@ -341,10 +450,14 @@ void * dequeue(queue_t * q, handle_t * th)
     th->Dh = th->Dh->next;
   }
 
-  RELEASE(&th->Hp, NULL);
+  node_t * cur = th->Dp;
+  while (cur->id < dp->id && !CAS(&th->Dp, &cur, dp));
+
+  id = cur->id > dp->id ? cur->id : dp->id;
+  RELEASE(&th->hzdptr, NULL);
 
   if (th->spare == NULL) {
-    cleanup(q, th);
+    tryRetireNodes(q, th, id);
     th->spare = new_node();
   }
 
@@ -358,8 +471,8 @@ static pthread_barrier_t barrier;
 
 void queue_init(queue_t * q, int nprocs)
 {
-  q->Hi = 0;
-  q->Hp = new_node();
+  q->Ri = 0;
+  q->Rp = new_node();
 
   q->Ei = 1;
   q->Di = 1;
@@ -400,9 +513,10 @@ void queue_free(queue_t * q, handle_t * h)
 void queue_register(queue_t * q, handle_t * th, int id)
 {
   th->next = NULL;
-  th->Hp = NULL;
-  th->Ep = q->Hp;
-  th->Dp = q->Hp;
+  th->hzdptr = NULL;
+
+  th->Ep = q->Rp;
+  th->Dp = q->Rp;
 
   th->Er.id = 0;
   th->Er.val = BOT;
@@ -411,6 +525,9 @@ void queue_register(queue_t * q, handle_t * th, int id)
 
   th->Ei = 0;
   th->spare = new_node();
+
+  th->retiredNodesHead = NULL;
+  th->retiredNodesTail = NULL;
 #ifdef RECORD
   th->slowenq = 0;
   th->slowdeq = 0;

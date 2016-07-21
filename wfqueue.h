@@ -3,6 +3,8 @@
 
 #ifdef WFQUEUE
 
+#include "list.h"
+
 #include "align.h"
 #define EMPTY ((void *) 0)
 
@@ -47,12 +49,12 @@ typedef struct DOUBLE_CACHE_ALIGNED {
   /**
    * Index of the head of the queue.
    */
-  volatile long Hi DOUBLE_CACHE_ALIGNED;
+  volatile long Ri DOUBLE_CACHE_ALIGNED;
 
   /**
    * Pointer to the head node of the queue.
    */
-  struct _node_t * volatile Hp;
+  struct _node_t * volatile Rp;
 
   /**
    * Number of processors.
@@ -76,7 +78,7 @@ typedef struct _handle_t {
   /**
    * Hazard pointer.
    */
-  struct _node_t * volatile Hp;
+  struct _node_t * volatile hzdptr;
 
   /**
    * Pointer to the node for enqueue.
@@ -102,7 +104,6 @@ typedef struct _handle_t {
    * Handle of the next enqueuer to help.
    */
   struct _handle_t * Eh CACHE_ALIGNED;
-
   long Ei;
 
   /**
@@ -116,9 +117,10 @@ typedef struct _handle_t {
   struct _node_t * spare CACHE_ALIGNED;
 
   /**
-   * Count the delay rounds of helping another dequeuer.
+   * A list to place retired nodes
    */
-  int delay;
+  listnode_t * retiredNodesHead;
+  listnode_t * retiredNodesTail;
 
 #ifdef RECORD
   long slowenq;
