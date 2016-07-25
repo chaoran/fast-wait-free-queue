@@ -3,8 +3,6 @@
 
 #ifdef WFQUEUE
 
-#include "list.h"
-
 #include "align.h"
 #define EMPTY ((void *) 0)
 
@@ -34,6 +32,12 @@ struct _node_t {
   long id CACHE_ALIGNED;
   struct _cell_t cells[WFQUEUE_NODE_SIZE] CACHE_ALIGNED;
 };
+
+typedef struct _listnode_t {
+  struct _listnode_t * next;
+  struct _node_t * from;
+  struct _node_t * to;
+} listnode_t;
 
 typedef struct DOUBLE_CACHE_ALIGNED {
   /**
@@ -83,7 +87,7 @@ typedef struct _handle_t {
   /**
    * Retire index.
    */
-  struct _node_t * volatile retidx CACHE_ALIGNED;
+  long volatile retidx CACHE_ALIGNED;
 
   /**
    * Pointer to the node for enqueue.

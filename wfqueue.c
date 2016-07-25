@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 #include <pthread.h>
 #include "wfqueue.h"
 #include "primitives.h"
@@ -48,7 +49,7 @@ static void tryReclaimNodes(queue_t * q, handle_t * th)
 
   /** Find out the oldest node that is being used. */
   handle_t * h;
-  long retidx = MAX_LONG;
+  long retidx = LONG_MAX;
   for (h = th->next; h != th; h = h->next) {
     long i = ACQUIRE(&h->retidx);
     if (i != 0 && i < retidx) retidx = i;
@@ -70,7 +71,7 @@ static void tryReclaimNodes(queue_t * q, handle_t * th)
       node = temp;
     }
 
-    if (cur == curr->to) {
+    if (node == curr->to) {
       /** Remove the retired nodes from my list. */
       curr = prev->next = curr->next;
     } else break;
@@ -80,7 +81,7 @@ static void tryReclaimNodes(queue_t * q, handle_t * th)
   if (!dummy.next) th->retiredNodesTail = NULL;
 }
 
-static checkHzdPtr(node_t * volatile * pHzdptr, node_t * new)
+static node_t * checkHzdPtr(node_t * volatile * pHzdptr, node_t * new)
 {
   node_t * hzdptr = ACQUIRE(pHzdptr);
 
@@ -91,8 +92,8 @@ static checkHzdPtr(node_t * volatile * pHzdptr, node_t * new)
   return new;
 }
 
-static updateHdlPtr(node_t * volatile * pHdlptr, node_t * volatile *
-    pHzdptr, node_t * new)
+static node_t * updateHdlPtr(node_t * volatile * pHdlptr, node_t *
+    volatile * pHzdptr, node_t * new)
 {
   node_t * ptr = *pHdlptr;
 
