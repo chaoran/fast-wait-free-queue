@@ -78,17 +78,22 @@ typedef struct _handle_t {
   /**
    * Hazard pointer.
    */
-  struct _node_t * volatile hzdptr;
+  struct _node_t * volatile hzdptr CACHE_ALIGNED;
+
+  /**
+   * Retire index.
+   */
+  struct _node_t * volatile retidx CACHE_ALIGNED;
 
   /**
    * Pointer to the node for enqueue.
    */
-  struct _node_t * volatile Ep;
+  struct _node_t * volatile Ep CACHE_ALIGNED;
 
   /**
    * Pointer to the node for dequeue.
    */
-  struct _node_t * volatile Dp;
+  struct _node_t * volatile Dp CACHE_ALIGNED;
 
   /**
    * Enqueue request.

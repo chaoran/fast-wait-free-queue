@@ -3,7 +3,8 @@
 
 typedef struct _listnode_t {
   struct _listnode_t * next;
-  void * data[0];
+  node_t * from;
+  node_t * to;
 } listnode_t;
 
 #endif /* end of include guard: LIST_H */

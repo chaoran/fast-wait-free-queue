@@ -41,86 +41,70 @@ static inline node_t * new_node() {
   return n;
 }
 
-static void tryReclaimRetiredNodes(queue_t * q, handle_t * th)
+static void tryReclaimNodes(queue_t * q, handle_t * th)
 {
   listnode_t * head = th->retiredNodesHead;
-  listnode_t * tail = th->retiredNodesTail;
-
-  /** Return if no retired nodes to clean. */
   if (!head) return;
 
-  /** We want to reclaim retired nodes between #old and #new. */
-
-  /** #old is the oldest node in the retired node list. */
-  node_t * old = head->data[0];
-
-  /**
-   * We cannot access #new's data, because no hazard pointer is set.
-   * Instead, we use #new_id which is saved earlier when
-   * hazard pointer is set.
-   */
-  long new_id = (long) tail->data[2];
-
-  /** Iterate every thread's handle. */
-  /** Check every thread's handle again to avoid jump backs. */
-  int i;
-  for (i = 0; i < 2; ++i) {
-    handle_t * h;
-    for (h = th->next; h != th; h = h->next) {
-      node_t * hzdptr = ACQUIRE(&h->hzdptr);
-
-      /**
-       * Check if #hzdptr is set and, if set, whether points to an
-       * retired node.
-       */
-      if (hzdptr && hzdptr->id < new_id) {
-        new_id = hzdptr->id;
-        if (new_id <= old->id) return;
-      }
-    }
+  /** Find out the oldest node that is being used. */
+  handle_t * h;
+  long retidx = MAX_LONG;
+  for (h = th->next; h != th; h = h->next) {
+    long i = ACQUIRE(&h->retidx);
+    if (i != 0 && i < retidx) retidx = i;
   }
 
-  /**
-   * Now we start reclaiming retired nodes.
-   */
   listnode_t dummy;
   dummy.next = head;
 
-  listnode_t * prev = &dummy;
   listnode_t * curr = head;
+  listnode_t * prev = &dummy;
 
-  /** Loop though retired nodes. */
   while (curr) {
-    node_t * node = curr->data[0];
-    node_t * last = curr->data[1];
+    node_t * node = curr->from;
 
-    /** Loop though segments in the retired list. */
-    while (node != last && node->id < new_id) {
-      node_t * next = node->next;
+    /** Reclaim retired nodes. */
+    while (node->id < retidx && node != curr->to) {
+      node_t * temp = node->next;
       free(node);
-      node = next;
+      node = temp;
     }
 
-    /**
-     * If not all retired segments are reclaimed, update segment start
-     * point and break out from the loop.
-     */
-    if (node != last) {
-      curr->data[0] = node;
-      break;
-    }
-
-    /** Remove current node from retired list. */
-    listnode_t * next = curr->next;
-    free(curr);
-
-    /** Visit next one. */
-    prev->next = curr = next;
+    if (cur == curr->to) {
+      /** Remove the retired nodes from my list. */
+      curr = prev->next = curr->next;
+    } else break;
   }
 
-  /** Update the head and tail pointer of retired list. */
   th->retiredNodesHead = dummy.next;
   if (!dummy.next) th->retiredNodesTail = NULL;
+}
+
+static checkHzdPtr(node_t * volatile * pHzdptr, node_t * new)
+{
+  node_t * hzdptr = ACQUIRE(pHzdptr);
+
+  if (hzdptr && hzdptr->id < new->id) {
+    new = hzdptr;
+  }
+
+  return new;
+}
+
+static updateHdlPtr(node_t * volatile * pHdlptr, node_t * volatile *
+    pHzdptr, node_t * new)
+{
+  node_t * ptr = *pHdlptr;
+
+  if (ptr->id < new->id) {
+    if (!CAScs(pHdlptr, &ptr, new)) {
+      if (ptr->id < new->id) new = ptr;
+    }
+
+    new = checkHzdPtr(pHzdptr, new);
+  }
+
+  return new;
 }
 
 static void tryRetireNodes(queue_t * q, handle_t * th, long new_id) {
@@ -128,52 +112,48 @@ static void tryRetireNodes(queue_t * q, handle_t * th, long new_id) {
   node_t * new = th->Dp;
   node_t * old;
 
-  /** Return if garbage amount has not exceed MAX_GARBAGE. */
-  if (new_id - old_id < MAX_GARBAGE(q->nprocs)) return;
-
-  /** Set hzdptr to Rp. */
+  /** Read Ri and Rp, write retidx, and make sure they are consistent. */
   while (1) {
-    th->hzdptr = old = q->Rp;
-    FENCE();
-
-    if (old->id == old_id) break;
-
-    /** Ensure Rp and Ri is consistant. */
-    if (CASa(&q->Ri, &old_id, old->id)) {
-      old_id = old->id;
-    }
-
-    /**
-     * #old_id is updated.
-     * Check whether threshold is satisfied again.
-     */
+    /** Return if garbage amount has not exceed MAX_GARBAGE. */
     if (new_id - old_id < MAX_GARBAGE(q->nprocs)) {
-      RELEASE(&th->hzdptr, NULL);
-      tryReclaimRetiredNodes(q, th);
+      RELEASE(&th->retidx, 0);
       return;
     }
+
+    /** Set retidx. */
+    th->retidx = old_id;
+    FENCE();
+
+    /** Read Rp */
+    old = q->Rp;
+
+    /** If Rp and Ri is consistent, proceed. */
+    if (old->id == old_id) break;
+
+    /** Otherwise, update Ri and retry. */
+    if (CASa(&q->Ri, &old_id, old->id)) old_id = old->id;
   }
 
   /** Update everyone's Ep and Dp. */
   handle_t * h;
-  for (h = th->next; h != th; h = h->next) {
-    node_t * ep = h->Ep;
-    while (ep->id < new_id && !CAScs(&h->Ep, &ep, new));
-
-    node_t * dp = h->Dp;
-    while (dp->id < new_id && !CAScs(&h->Dp, &dp, new));
+  for (h = th->next; h != th && new->id > old_id; h = h->next) {
+    new = checkHzdPtr(&h->hzdptr, new);
+    new = updateHdlPtr(&h->Ep, &h->hzdptr, new);
+    new = updateHdlPtr(&h->Dp, &h->hzdptr, new);
+  }
+  for (h = th->next; h != th && new->id > old_id; h = h->next) {
+    new = checkHzdPtr(&h->hzdptr, new);
   }
 
-  RELEASE(&th->hzdptr, NULL);
+  new_id = new->id;
+  RELEASE(&th->retidx, 0);
 
   /**
-   * Change Rp from old to new;
-   * if failed, release hzdptr and return.
+   * If someone is using the #old node or someone already retired #old,
+   * release hzdptr and return.
    */
-  if (!CASra(&q->Rp, &old, new)) {
-    tryReclaimRetiredNodes(q, th);
-    return;
-  }
+  if (new_id <= old_id) return;
+  if (!CASra(&q->Rp, &old, new)) return;
 
   /**
    * Update Ri from #old_id to #new_id;
@@ -181,13 +161,10 @@ static void tryRetireNodes(queue_t * q, handle_t * th, long new_id) {
   CAS(&q->Ri, &old_id, new_id);
 
   /** Add the region to my list of retiredNodes. */
-  listnode_t * retiredNode = malloc(sizeof(listnode_t)
-      + sizeof(void * [3]));
-
+  listnode_t * retiredNode = malloc(sizeof(listnode_t));
   retiredNode->next = NULL;
-  retiredNode->data[0] = old;
-  retiredNode->data[1] = new;
-  retiredNode->data[2] = (void *) new_id;
+  retiredNode->from = old;
+  retiredNode->to = new;
 
   if (!th->retiredNodesTail) {
     th->retiredNodesTail = retiredNode;
@@ -197,7 +174,7 @@ static void tryRetireNodes(queue_t * q, handle_t * th, long new_id) {
     th->retiredNodesTail = retiredNode;
   }
 
-  tryReclaimRetiredNodes(q, th);
+  tryReclaimNodes(q, th);
 }
 
 static cell_t * find_cell(node_t * volatile * ptr, long i, handle_t * th) {
@@ -514,6 +491,7 @@ void queue_register(queue_t * q, handle_t * th, int id)
 {
   th->next = NULL;
   th->hzdptr = NULL;
+  th->retidx = 0;
 
   th->Ep = q->Rp;
   th->Dp = q->Rp;
