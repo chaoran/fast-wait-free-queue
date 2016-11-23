@@ -1,8 +1,8 @@
 TESTS = wfqueue wfqueue0 lcrq ccqueue msqueue faa delay
 
-CC = gcc
-CFLAGS = -g -Wall -O3 -pthread -D_GNU_SOURCE
-LDLIBS = -lpthread -lm
+CC = gcc-5
+CFLAGS = -g -Wall -O3 -fsanitize=address -pthread -D_GNU_SOURCE
+LDLIBS = -lpthread -lm -lasan
 
 ifeq (${VERIFY}, 1)
 	CFLAGS += -DVERIFY
