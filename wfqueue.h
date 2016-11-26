@@ -78,19 +78,19 @@ typedef struct _handle_t {
    * Hazard pointer.
    */
   //struct _node_t * volatile Hp;
-  unsigned long volatile hzd_node_id;
+  long volatile hzd_node_id;
 
   /**
    * Pointer to the node for enqueue.
    */
   struct _node_t * volatile Ep;
-  unsigned long enq_node_id;
+  long enq_node_id;
 
   /**
    * Pointer to the node for dequeue.
    */
   struct _node_t * volatile Dp;
-  unsigned long deq_node_id;
+  long deq_node_id;
 
   /**
    * Enqueue request.
