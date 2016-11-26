@@ -41,24 +41,34 @@ static inline node_t * new_node() {
   return n;
 }
 
+static node_t * find_node(node_t * start, unsigned long id) {
+  node_t * node = start;
+
+  while (node->id != id) {
+    node = node->next;
+  }
+
+  return node;
+}
+
 static node_t * update(node_t * volatile * pPn, node_t * cur,
-    node_t * volatile * pHp) {
-  node_t * ptr = *pPn;
+    unsigned long volatile * p_hzd_node_id, node_t * old) {
+  node_t * ptr = ACQUIRE(pPn);
 
   if (ptr->id < cur->id) {
     if (!CAScs(pPn, &ptr, cur)) {
       if (ptr->id < cur->id) cur = ptr;
     }
 
-    node_t * Hp = *pHp;
-    if (Hp && Hp->id < cur->id) cur = Hp;
+    unsigned long hzd_node_id = ACQUIRE(p_hzd_node_id);
+    if (hzd_node_id < cur->id) cur = find_node(old, hzd_node_id);
   }
 
   return cur;
 }
 
 static void cleanup(queue_t * q, handle_t * th) {
-  long oid = q->Hi;
+  long oid = ACQUIRE(&q->Hi);
   node_t * new = th->Dp;
 
   if (oid == -1) return;
@@ -71,19 +81,19 @@ static void cleanup(queue_t * q, handle_t * th) {
   int i = 0;
 
   do {
-    node_t * Hp = ACQUIRE(&ph->Hp);
-    if (Hp && Hp->id < new->id) new = Hp;
+    unsigned long hzd_node_id = ACQUIRE(&ph->hzd_node_id);
+    if (hzd_node_id < new->id) new = find_node(old, hzd_node_id);
 
-    new = update(&ph->Ep, new, &ph->Hp);
-    new = update(&ph->Dp, new, &ph->Hp);
+    new = update(&ph->Ep, new, &ph->hzd_node_id, old);
+    new = update(&ph->Dp, new, &ph->hzd_node_id, old);
 
     phs[i++] = ph;
     ph = ph->next;
   } while (new->id > oid && ph != th);
 
   while (new->id > oid && --i >= 0) {
-    node_t * Hp = ACQUIRE(&phs[i]->Hp);
-    if (Hp && Hp->id < new->id) new = Hp;
+    unsigned long hzd_node_id = ACQUIRE(&phs[i]->hzd_node_id);
+    if (hzd_node_id < new->id) new = find_node(old, hzd_node_id);
   }
 
   long nid = new->id;
@@ -184,14 +194,16 @@ static void enq_slow(queue_t * q, handle_t * th, void * v, long id)
 
 void enqueue(queue_t * q, handle_t * th, void * v)
 {
-  th->Hp = th->Ep;
+  //th->Hp = th->Ep;
+  th->hzd_node_id = th->Ei;
 
   long id;
   int p = MAX_PATIENCE;
   while (!enq_fast(q, th, v, &id) && p-- > 0);
   if (p < 0) enq_slow(q, th, v, id);
 
-  RELEASE(&th->Hp, NULL);
+  th->enq_node_id = th->Ep->id;
+  RELEASE(&th->hzd_node_id, -1);
 }
 
 static void * help_enq(queue_t * q, handle_t * th, cell_t * c, long i)
@@ -251,7 +263,8 @@ static void help_deq(queue_t * q, handle_t * th, handle_t * ph)
   if (idx < id) return;
 
   node_t * Dp = ph->Dp;
-  th->Hp = Dp;
+  //th->Hp = Dp;
+  th->hzd_node_id = ph->hzd_node_id;
   FENCE();
   idx = deq->idx;
 
@@ -321,7 +334,8 @@ static void * deq_slow(queue_t * q, handle_t * th, long id)
 
 void * dequeue(queue_t * q, handle_t * th)
 {
-  th->Hp = th->Dp;
+  //th->Hp = th->Dp;
+  th->hzd_node_id = th->deq_node_id;
 
   void * v;
   long id;
@@ -341,7 +355,8 @@ void * dequeue(queue_t * q, handle_t * th)
     th->Dh = th->Dh->next;
   }
 
-  RELEASE(&th->Hp, NULL);
+  th->deq_node_id = th->Dp->id;
+  RELEASE(&th->hzd_node_id, -1);
 
   if (th->spare == NULL) {
     cleanup(q, th);
@@ -400,9 +415,11 @@ void queue_free(queue_t * q, handle_t * h)
 void queue_register(queue_t * q, handle_t * th, int id)
 {
   th->next = NULL;
-  th->Hp = NULL;
+  th->hzd_node_id = (unsigned long) -1;
   th->Ep = q->Hp;
+  th->enq_node_id = th->Ep->id;
   th->Dp = q->Hp;
+  th->deq_node_id = th->Dp->id;
 
   th->Er.id = 0;
   th->Er.val = BOT;

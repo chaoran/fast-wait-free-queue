@@ -8,6 +8,12 @@ ifeq (${VERIFY}, 1)
 	CFLAGS += -DVERIFY
 endif
 
+ifeq (${SANITIZE}, 1)
+	CFLAGS += -fsanitize=address -fno-omit-frame-pointer
+	LDLIBS += -lasan
+	LDFLAGS = -fsanitize=address
+endif
+
 ifdef JEMALLOC_PATH
 	LDFLAGS += -L${JEMALLOC_PATH}/lib -Wl,-rpath,${JEMALLOC_PATH}/lib
 	LDLIBS += -ljemalloc
