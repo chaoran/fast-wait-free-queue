@@ -7,8 +7,7 @@
 #define EMPTY ((void *) 0)
 
 #ifndef WFQUEUE_NODE_SIZE
-//#define WFQUEUE_NODE_SIZE ((1 << 10) - 2)
-#define WFQUEUE_NODE_SIZE 4
+#define WFQUEUE_NODE_SIZE ((1 << 10) - 2)
 #endif
 
 struct _enq_t {
