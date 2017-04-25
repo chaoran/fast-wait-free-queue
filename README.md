@@ -1,4 +1,4 @@
-## Fast Wait Free Queue
+# Fast Wait Free Queue
 
 This is a benchmark framework for evaluating the performance of concurrent queues. Currently, it contains four concurrent queue implementations. They are:
 
