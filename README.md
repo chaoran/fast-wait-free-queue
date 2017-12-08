@@ -13,7 +13,7 @@ The framework currently contains one benchmark, `pairwise`, in which all threads
 
 ## Requirements
 
-- **GCC 4.1.0 or later (Recommand GCC 4.7.3 or later)**: current implementations uses GCC `__atomic` or `__sync` primitives for atomic memory access.
+- **GCC 4.1.0 or later (Recommend GCC 4.7.3 or later)**: current implementations uses GCC `__atomic` or `__sync` primitives for atomic memory access.
 - **Linux kernel 2.5.8 or later**
 - **glibc 2.3**: we use `sched_setaffinity` to bind threads to cores.
 - **atomic `CAS2`**: `lcrq` requires `CAS2`, a 16 Byte wide `compare-and-swap` primitive. This is available on most recent Intel processors and IBM Power8.
@@ -66,7 +66,7 @@ runs each of `wfqueue`, `lcrq`, `faa`, and `delay` using 1, 2, 4, and 8 threads.
 Then you can plot them using,
 ```
 set logscale x 2
-plot "t" using 1:(20000/($2-$8)) t "wqueue" w lines, \
+plot "t" using 1:(20000/($2-$8)) t "wfqueue" w lines, \
      "t" using 1:(20000/($4-$8)) t "lcrq" w lines, \
      "t" using 1:(20000/($6-$8)) t "faa" w lines
 ```
@@ -99,7 +99,7 @@ A queue should implements the queue interface, defined in `queue.h`.
 A benchmark should implement the benchmark interface, defined in `benchmark.h`, and interact with a queue using the queue interface.
 The benchmark interface includes:
 
-- `void init(int nprocs, int n)`: performs initilization of the benchmark; called only once at the beginning.
+- `void init(int nprocs, int n)`: performs initialization of the benchmark; called only once at the beginning.
 - `void thread_init(int id, int nprocs)`: performs thread local initialization of the benchmark; called once per thread, after `init` but before `benchmark`.
 - `void * benchmark(int id, int nprocs)`: run the benchmark once, called by each thread to run the benchmark. Each call will be timed and report as one iteration. It can return a result, which will be passed to `verify` to verify correctness.
 - `int verify(int nprocs, void * results)`: should verify the result of each thread and return `0` on success and non-zero values on error.
