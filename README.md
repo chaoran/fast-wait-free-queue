@@ -92,7 +92,8 @@ A queue should implements the queue interface, defined in `queue.h`.
 - `void queue_register(queue_t * q, handle_t * th, int id)`: initialize a thread's handle; this will be called by every thread that uses the queue,
 - `void enqueue(queue_t * q, handle_t * th, void * val)`: enqueues a value,
 - `void * dequeue(queue_t * q, handle_t * th)`: dequeues a value,
-- `EMPTY`: a value that will be returned if a `dequeue` fails.
+- `void queue_free(queue_t * q, handle_t * h)`: deallocate a queue and cleanup all resources associated with it,
+- `EMPTY`: a value that will be returned if a `dequeue` fails. This should be a macro that is defined in the header file.
 
 ## How to add a new benchmark
 
