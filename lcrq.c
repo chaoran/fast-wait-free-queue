@@ -240,5 +240,11 @@ void * dequeue(queue_t * q, handle_t * th)
   return (void *) lcrq_get(q, th);
 }
 
-void queue_free(int id, int nprocs) {}
-
+void queue_free(queue_t * q, handle_t * h){
+  RingQueue *rq = q->orignialHead;
+  do{
+    RingQueue *n = rq->next;
+    free(rq);
+    rq = n;
+  }while(rq);
+}

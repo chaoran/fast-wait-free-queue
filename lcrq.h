@@ -28,6 +28,7 @@ typedef struct RingQueue {
 typedef struct {
   RingQueue * volatile head DOUBLE_CACHE_ALIGNED;
   RingQueue * volatile tail DOUBLE_CACHE_ALIGNED;
+  RingQueue * orignialHead;
   int nprocs;
 } queue_t;
 
