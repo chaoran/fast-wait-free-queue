@@ -241,7 +241,7 @@ void * dequeue(queue_t * q, handle_t * th)
 }
 
 void queue_free(queue_t * q, handle_t * h){
-  RingQueue *rq = q->orignialHead;
+  RingQueue *rq = q->head;
   while(rq){
     RingQueue *n = rq->next;
     free(rq);
