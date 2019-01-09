@@ -239,7 +239,15 @@ void * dequeue(queue_t * q, handle_t * th)
 {
   return (void *) lcrq_get(q, th);
 }
-
+//By K
+void handle_free(handle_t *h){
+  hzdptr_t *hzd = &h->hzdptr;
+  void **rlist = &hzd->ptrs[hzd->nptrs];
+  for(int i = 0;i < hzd->nretired; i++){
+    free(rlist[i]);
+  }
+  free(h->hzdptr.ptrs);
+}
 void queue_free(queue_t * q, handle_t * h){
   RingQueue *rq = q->head;
   while(rq){
