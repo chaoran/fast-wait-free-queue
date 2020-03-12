@@ -78,7 +78,11 @@ static void cleanup(queue_t *q, handle_t *th) {
     if (oid == -1) return;
     if (new->id - oid < MAX_GARBAGE(q->nprocs)) return;
     if (!CASa(&q->Hi, &oid, -1)) return;
-
+    
+    long Di = q->Di, Ei = q->Ei;
+    while(Ei <= Di && !CAS(&q->Ei, &Ei, Di + 1))
+        ;
+    
     node_t *old = q->Hp;
     handle_t *ph = th;
     handle_t *phs[q->nprocs];
@@ -228,10 +232,12 @@ static void *help_enq(queue_t *q, handle_t *th, cell_t *c, long i) {
             ph = th->Eh, pe = &ph->Er, id = pe->id;
         }
 
-        if (id > 0 && id <= i && !CAS(&c->enq, &e, pe))
+        if (id > 0 && id <= i && !CAS(&c->enq, &e, pe) && e != pe)
             th->Ei = id;
-        else
+        else {
+            th->Ei = 0;
             th->Eh = ph->next;
+        }
 
         if (e == BOT && CAS(&c->enq, &e, TOP)) e = TOP;
     }
