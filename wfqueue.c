@@ -191,6 +191,7 @@ static void enq_slow(queue_t *q, handle_t *th, void *v, long id) {
             ;
     }
     c->val = v;
+    c->used = 1;
 
 #ifdef RECORD
     th->slowenq++;
@@ -250,7 +251,7 @@ static void *help_enq(queue_t *q, handle_t *th, cell_t *c, long i) {
     if (ei > i) {
         if (c->val == TOP && q->Ei <= i) return BOT;
     } else {
-        if ((ei > 0 && CAS(&e->id, &ei, -i)) || (ei == -i && c->val == TOP)) {
+        if ((ei > 0 && !c->used && CAS(&e->id, &ei, -i)) || (ei == -i && c->val == TOP)) {
             long Ei = q->Ei;
             while (Ei <= i && !CAS(&q->Ei, &Ei, i + 1))
                 ;
