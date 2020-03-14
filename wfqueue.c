@@ -306,13 +306,11 @@ static void help_deq(queue_t *q, handle_t *th, handle_t *ph) {
     th->hzd_node_id = ph->hzd_node_id;
     FENCE();
     idx = deq->idx;
+
     long i = id + 1, old = id, new = 0;
-    if(idx != old) 
-        goto probe;
-        
     while (1) {
         node_t *h = Dp;
-        for (;;) {
+        for (; idx == old && new == 0; ++i) {
             cell_t *c = find_cell(&h, i, th);
 
             long Di = q->Di;
@@ -320,31 +318,26 @@ static void help_deq(queue_t *q, handle_t *th, handle_t *ph) {
                 ;
 
             void *v = help_enq(q, th, c, i);
-            if (v == BOT || (v != TOP && c->deq == BOT)) {
-                new = i++;
-                RealWork:
-                if (CASra(&deq->idx, &idx, new)) 
-                    idx = new;
-                goto probe;
-            }
-            else {
+            if (v == BOT || (v != TOP && c->deq == BOT))
+                new = i;
+            else
                 idx = ACQUIRE(&deq->idx);
-                ++i;
-                if(idx != old)
-                    goto probe;
-            }
         }
-        probe:
-        if (idx < 0 || deq->id != id) return;                    
+
+        if (new != 0) {
+            if (CASra(&deq->idx, &idx, new)) idx = new;
+            if (idx >= new) new = 0;
+        }
+
+        if (idx < 0 || deq->id != id) break;
 
         cell_t *c = find_cell(&Dp, idx, th);
         deq_t *cd = BOT;
         if (c->val == TOP || CAS(&c->deq, &cd, deq) || cd == deq) {
             CAS(&deq->idx, &idx, -idx);
-            return;
+            break;
         }
-        if(idx < new) 
-            goto RealWork;
+
         old = idx;
         if (idx >= i) i = idx + 1;
     }
