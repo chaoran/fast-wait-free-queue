@@ -24,7 +24,7 @@ struct _cell_t {
   void * volatile val;
   struct _enq_t * volatile enq;
   struct _deq_t * volatile deq;
-  long used;
+  long help_enq_id;
   void * pad[4];
 };
 
