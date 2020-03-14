@@ -191,7 +191,7 @@ static void enq_slow(queue_t *q, handle_t *th, void *v, long id) {
         if (CAScs(&c->help_enq_id, &chei, id) || chei == id) {
             c->enq = enq;
             if (c->val != TOP) {
-                CAS(&enq->id, &id, -i);
+                if (CAS(&enq->id, &id, -i)) id = -i;
                 break;
             }
         }
