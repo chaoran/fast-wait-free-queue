@@ -28,8 +28,8 @@ static inline void *spin(void *volatile *p) {
     void *v = *p;
 
     while (!v && patience-- > 0) {
-        v = *p;
         PAUSE();
+        v = *p;
     }
 
     return v;
@@ -39,8 +39,8 @@ static inline void *spin_util_val(struct _enq_t * volatile* p) {
     void *v = *p;
 
     while (!v) {
-        v = *p;
         PAUSE();
+        v = *p;
     }
 
     return v;
