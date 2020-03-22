@@ -313,11 +313,13 @@ static void help_deq(queue_t *q, handle_t *th, handle_t *ph) {
         for (; idx == old && new == 0; ++i) {
             cell_t *c = find_cell(&h, i, th);
 
-            long Di = q->Di;
-            while (Di <= i && !CAS(&q->Di, &Di, i + 1))
-                ;
-
             void *v = help_enq(q, th, c, i);
+            // increase Di;
+            if (v == BOT || v == TOP || c->deq != BOT) {
+                long Di = q->Di;
+                while (Di <= i && !CAS(&q->Di, &Di, i + 1))
+                    ;
+            }
             if (v == BOT || (v != TOP && c->deq == BOT))
                 new = i;
             else
@@ -333,7 +335,15 @@ static void help_deq(queue_t *q, handle_t *th, handle_t *ph) {
 
         cell_t *c = find_cell(&Dp, idx, th);
         deq_t *cd = BOT;
-        if (c->val == TOP || CAS(&c->deq, &cd, deq) || cd == deq) {
+        if (c->val == TOP) {
+            CAS(&deq->idx, &idx, -idx);
+            break;
+        }
+        // increase Di;
+        long Di = q->Di;
+        while (Di <= idx && !CAS(&q->Di, &Di, idx + 1))
+            ;
+        if(CAS(&c->deq, &cd, deq) || cd == deq) {
             CAS(&deq->idx, &idx, -idx);
             break;
         }
