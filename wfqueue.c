@@ -84,12 +84,13 @@ static node_t *update(node_t *volatile *pPn, node_t *cur,
 
 static void cleanup(queue_t *q, handle_t *th) {
     long oid = ACQUIRE(&q->Hi);
-    node_t *new = th->Dp;
+    long id = th->deq_node_id;
 
     if (oid == -1) return;
-    if (new->id - oid < MAX_GARBAGE(q->nprocs)) return;
+    if (id - oid < MAX_GARBAGE(q->nprocs)) return;
     if (!CASa(&q->Hi, &oid, -1)) return;
     
+    node_t *new = th->Dp;
     long Di = q->Di, Ei = q->Ei;
     while(Ei <= Di && !CAS(&q->Ei, &Ei, Di + 1))
         ;
